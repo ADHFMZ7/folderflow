@@ -1,13 +1,12 @@
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMockApi, FRESH_SETTINGS, type MockOptions } from "../api/mock";
-import type { Settings } from "../api/types";
+import { StrictMode } from "react";
+import { createMockApi, type MockOptions } from "../api/mock";
 import { App } from "../app/App";
 
-/** Renders the whole app on a mock api with no delays. */
-export function renderApp(options: MockOptions & { settings?: Partial<Settings> } = {}) {
-  const { settings, ...mockOptions } = options;
-  const api = createMockApi({ delayMs: 0, ...mockOptions });
-  if (settings) api.saveSettings({ ...FRESH_SETTINGS, ...settings });
-  return { api, user: userEvent.setup(), ...render(<App api={api} />) };
+/** Renders the whole app on a mock api with no delays, in Strict Mode like main.tsx,
+    so effects run twice here just as they do in development. */
+export function renderApp(options: MockOptions = {}) {
+  const api = createMockApi({ delayMs: 0, ...options });
+  return { api, user: userEvent.setup(), ...render(<StrictMode><App api={api} /></StrictMode>) };
 }

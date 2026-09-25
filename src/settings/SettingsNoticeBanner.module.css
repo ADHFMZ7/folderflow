@@ -1,0 +1,7 @@
+.banner {
+  display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-5);
+  background: color-mix(in srgb, var(--warn) 12%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+}
+.banner p { flex: 1; }
+.path { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.dismiss { background: transparent; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-1) var(--space-3); cursor: pointer; }

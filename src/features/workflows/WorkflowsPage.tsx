@@ -23,9 +23,18 @@ export function WorkflowsPage({ workflows, templates }: { workflows: WorkflowSum
   );
 }
 
-/** Warns about model kinds that saved workflows need, or any kind at all before the first workflow exists. */
+/** Warns about model kinds that saved workflows need, or any kind at all before the first workflow exists.
+    A provider that couldn't be reached is reported first, since it explains the missing models. */
 function MissingModelsBanner({ workflows }: { workflows: WorkflowSummary[] }) {
-  const { kinds, models, settings } = useSettings();
+  const { kinds, models, settings, modelProblems, retryModels } = useSettings();
+  if (modelProblems.length) {
+    const [first] = modelProblems;
+    return (
+      <Banner action={<Button variant="secondary" onClick={retryModels}>Retry</Button>}>
+        Couldn't load models from {modelProblems.map((p) => p.providerName).join(" and ")}. {first.message}
+      </Banner>
+    );
+  }
   const needed = workflows.length ? [...new Set(workflows.flatMap((w) => w.kindsNeeded))] : kinds.map((k) => k.id);
   const missing = missingKinds(needed, kinds, settings.defaults, models);
   if (!missing.length) return null;

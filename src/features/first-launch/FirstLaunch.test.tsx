@@ -19,7 +19,7 @@ describe("first launch", () => {
 
     expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("No LLM and System 1 model is set up");
-    expect((await api.getSettings()).setupComplete).toBe(true);
+    expect((await api.getSettings()).settings.setupComplete).toBe(true);
   });
 
   it("connects a local provider and makes its model the LLM default", async () => {
@@ -71,6 +71,39 @@ describe("first launch", () => {
       await user.click(screen.getByRole("button", { name: new RegExp(`^${name}`) }));
       expect(screen.getByRole("link", { name: `Get an API key from ${name}` })).toHaveAttribute("href", url);
     }
+  });
+
+  it("shows a provider failure and lets the user try again", async () => {
+    const { user } = renderApp({ faultyProviders: ["anthropic"] });
+    await toModelStep(user);
+    await user.click(screen.getByRole("button", { name: /^Anthropic/ }));
+    await user.type(screen.getByLabelText("API key"), "sk-live-1234567890abcdef");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByText("Anthropic sent an answer FolderFlow couldn't read. Try again later.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("shows a detection failure with a way to check again", async () => {
+    const { user } = renderApp({ faultyProviders: ["ollama"] });
+    await toModelStep(user);
+    await user.click(screen.getByRole("button", { name: /^Ollama/ }));
+
+    expect(await screen.findByText("Ollama sent an answer FolderFlow couldn't read. Try again later.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+  });
+
+  it("keeps no trace of a key after connecting", async () => {
+    const KEY = "sk-live-1234567890abcdef";
+    const { user } = renderApp();
+    await toModelStep(user);
+    await user.click(screen.getByRole("button", { name: /^Anthropic/ }));
+    await user.type(screen.getByLabelText("API key"), KEY);
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByText("Connected")).toBeInTheDocument();
+    expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain(KEY);
   });
 
   it("fills the System 1 default when a provider offering it is connected", async () => {
