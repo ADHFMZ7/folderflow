@@ -6,6 +6,7 @@ use std::io;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use super::atomic::write_atomic;
 use super::data_dir::DataDir;
@@ -13,9 +14,10 @@ use super::data_dir::DataDir;
 /// The settings format this build writes.
 pub const SETTINGS_VERSION: u32 = 1;
 
-/// Mirrors `Settings` in src/api/types.ts; the JSON field names are the contract.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// The user's settings. The JSON field names are the contract with the front end.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct Settings {
     pub setup_complete: bool,
     pub open_at_login: bool,
@@ -35,15 +37,21 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Connection {
     pub id: String,
     pub provider_id: String,
+    /// The server address, for providers connected by address. Never holds a key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub endpoint: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ModelRef {
     pub connection_id: String,
     pub model_id: String,

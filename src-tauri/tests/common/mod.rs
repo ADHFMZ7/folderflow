@@ -1,5 +1,7 @@
-//! Shared helpers for the storage tests.
+//! Shared helpers for the integration tests.
 #![allow(dead_code)]
+
+pub mod api;
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

@@ -16,6 +16,7 @@ fn sample() -> Settings {
         connections: vec![Connection {
             id: "c1".into(),
             provider_id: "ollama".into(),
+            endpoint: None,
         }],
         defaults: BTreeMap::from([
             (

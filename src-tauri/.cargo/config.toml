@@ -1,0 +1,4 @@
+[env]
+# `cargo test` writes the TypeScript contract types here (ts-rs). CI fails if
+# they differ from what is committed.
+TS_RS_EXPORT_DIR = { value = "../src/api/generated", relative = true }
