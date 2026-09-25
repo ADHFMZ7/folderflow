@@ -1,0 +1,2 @@
+.link { color: var(--accent); font-weight: 550; text-decoration: none; }
+.link:hover { text-decoration: underline; }
