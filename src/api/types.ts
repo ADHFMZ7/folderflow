@@ -31,7 +31,12 @@ export type Provider = {
 export type Credentials = { apiKey?: string; endpoint?: string };
 
 /** A provider the user has set up. Secrets stay in the backend, never here. */
-export type Connection = { id: string; providerId: string };
+export type Connection = {
+  id: string;
+  providerId: string;
+  /** The server address, for providers connected by address. */
+  endpoint?: string;
+};
 
 export type Model = { id: string; connectionId: string; name: string; kind: ModelKindId };
 

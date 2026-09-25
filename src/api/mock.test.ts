@@ -95,6 +95,23 @@ describe("connect", () => {
     expect(store.dump()).not.toContain(KEY);
   });
 
+  it("remembers a custom server's address, without a trailing slash", async () => {
+    const outcome = await api().connect("custom", { endpoint: "http://localhost:8080/" });
+    if (!outcome.ok) throw new Error(outcome.error);
+    expect(outcome.connection.endpoint).toBe("http://localhost:8080");
+  });
+
+  it("gives other providers no address", async () => {
+    const outcome = await api().connect("ollama", {});
+    if (!outcome.ok) throw new Error(outcome.error);
+    expect(outcome.connection).not.toHaveProperty("endpoint");
+  });
+
+  it("fails with a provider error when a provider answers unexpectedly", async () => {
+    const a = api({ faultyProviders: ["anthropic"] });
+    await expect(a.connect("anthropic", { apiKey: "sk-long-enough-key" })).rejects.toMatchObject({ code: "provider" });
+  });
+
   it("refuses an unknown provider", async () => {
     await expect(api().connect("nope", {})).rejects.toMatchObject({ code: "not_found" });
   });

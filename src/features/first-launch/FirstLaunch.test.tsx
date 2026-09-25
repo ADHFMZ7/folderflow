@@ -73,6 +73,26 @@ describe("first launch", () => {
     }
   });
 
+  it("shows a provider failure and lets the user try again", async () => {
+    const { user } = renderApp({ faultyProviders: ["anthropic"] });
+    await toModelStep(user);
+    await user.click(screen.getByRole("button", { name: /^Anthropic/ }));
+    await user.type(screen.getByLabelText("API key"), "sk-live-1234567890abcdef");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByText("Anthropic sent an answer FolderFlow couldn't read. Try again later.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("shows a detection failure with a way to check again", async () => {
+    const { user } = renderApp({ faultyProviders: ["ollama"] });
+    await toModelStep(user);
+    await user.click(screen.getByRole("button", { name: /^Ollama/ }));
+
+    expect(await screen.findByText("Ollama sent an answer FolderFlow couldn't read. Try again later.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+  });
+
   it("keeps no trace of a key after connecting", async () => {
     const KEY = "sk-live-1234567890abcdef";
     const { user } = renderApp();

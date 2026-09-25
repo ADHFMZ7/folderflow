@@ -80,6 +80,8 @@ export type MockOptions = {
   settings?: Partial<Settings>;
   /** Pretend the settings file on disk was damaged, or written by a newer version. */
   storedFile?: "damaged" | "tooNew";
+  /** Providers that answer with something unreadable, like a server error. */
+  faultyProviders?: string[];
 };
 
 const SETTINGS_KEY = "folderflow.settings";
@@ -115,6 +117,12 @@ export function createMockApi(options: MockOptions = {}): Api {
   const modelsFor = (connection: Connection): Model[] =>
     (MODELS[connection.providerId] ?? []).map((m) => ({ ...m, connectionId: connection.id }));
 
+  const faulty = (providerId: string) => {
+    if (!options.faultyProviders?.includes(providerId)) return;
+    const name = PROVIDERS.find((p) => p.id === providerId)?.name ?? providerId;
+    throw new ApiError("provider", `${name} sent an answer FolderFlow couldn't read. Try again later.`);
+  };
+
   const isWorking = (settings: Settings, ref: ModelRef | null | undefined) =>
     !!ref && settings.connections.some((c) => c.id === ref.connectionId);
 
@@ -140,6 +148,7 @@ export function createMockApi(options: MockOptions = {}): Api {
 
     async detect(providerId) {
       await wait();
+      faulty(providerId);
       if (providerId !== "ollama") return { found: false, reason: "This provider can't be detected." };
       return ollamaRunning ? { found: true } : { found: false, reason: "Ollama isn't running on this Mac." };
     },
@@ -148,6 +157,7 @@ export function createMockApi(options: MockOptions = {}): Api {
       await wait();
       const provider = PROVIDERS.find((p) => p.id === providerId);
       if (!provider) throw new ApiError("not_found", `no provider with id ${providerId}`);
+      faulty(providerId);
       if (provider.connect === "detect" && !ollamaRunning) return { ok: false, error: "Couldn't reach Ollama." };
       if (provider.connect === "apiKey" && !(credentials.apiKey ?? "").trim()) return { ok: false, error: "Enter an API key." };
       if (provider.connect === "apiKey" && (credentials.apiKey ?? "").trim().length < 12)
@@ -158,6 +168,7 @@ export function createMockApi(options: MockOptions = {}): Api {
       // The key itself would go to the Keychain; the mock keeps nothing of it.
       const settings = read();
       const connection: Connection = { id: `${providerId}-${Date.now()}-${++connectionCount}`, providerId };
+      if (provider.connect === "endpoint") connection.endpoint = credentials.endpoint!.replace(/\/+$/, "");
       const connections = [...settings.connections, connection];
       const withConnection = { ...settings, connections };
       const defaults = { ...settings.defaults };
@@ -185,6 +196,7 @@ export function createMockApi(options: MockOptions = {}): Api {
     async listModels(connectionId) {
       const connection = read().connections.find((c) => c.id === connectionId);
       if (!connection) throw new ApiError("not_found", `no connection with id ${connectionId}`);
+      faulty(connection.providerId);
       return modelsFor(connection);
     },
 

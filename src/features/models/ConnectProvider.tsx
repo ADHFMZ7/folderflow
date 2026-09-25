@@ -28,15 +28,23 @@ function DetectPanel({ provider, onConnected }: Props) {
 
   const check = async () => {
     setState("checking");
-    const result = await api.detect(provider.id);
-    setState(result.found ? "found" : { missing: result.reason });
+    try {
+      const result = await api.detect(provider.id);
+      setState(result.found ? "found" : { missing: result.reason });
+    } catch (e) {
+      setState({ error: messageOf(e) });
+    }
   };
 
   const use = async () => {
     setState("connecting");
-    const result = await connect(provider.id, {});
-    if (result.ok) onConnected();
-    else setState({ error: result.error });
+    try {
+      const result = await connect(provider.id, {});
+      if (result.ok) onConnected();
+      else setState({ error: result.error });
+    } catch (e) {
+      setState({ error: messageOf(e) });
+    }
   };
 
   useEffect(() => { check(); }, [provider.id]);
@@ -60,6 +68,8 @@ function DetectPanel({ provider, onConnected }: Props) {
   );
 }
 
+const messageOf = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong. Try again.");
+
 const FIELD_LABEL: Record<keyof Credentials, string> = { apiKey: "API key", endpoint: "Server address" };
 
 function CredentialsForm({ provider, onConnected, fields }: Props & { fields: (keyof Credentials)[] }) {
@@ -72,11 +82,16 @@ function CredentialsForm({ provider, onConnected, fields }: Props & { fields: (k
   const submit = async () => {
     setBusy(true);
     setError(null);
-    const result = await connect(provider.id, values);
-    setBusy(false);
-    // On success the form unmounts, and the key typed into it goes with it.
-    if (result.ok) onConnected();
-    else setError(result.error);
+    try {
+      const result = await connect(provider.id, values);
+      // On success the form unmounts, and the key typed into it goes with it.
+      if (result.ok) onConnected();
+      else setError(result.error);
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
