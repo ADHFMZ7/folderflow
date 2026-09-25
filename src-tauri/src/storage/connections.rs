@@ -30,10 +30,21 @@ impl<'a> Connections<'a> {
         provider_id: &str,
         key: Option<Secret>,
     ) -> Result<Connection, ConnectionError> {
+        self.add_with_endpoint(provider_id, None, key)
+    }
+
+    /// Adds a connection to a provider reached at a server address the user chose.
+    pub fn add_with_endpoint(
+        &self,
+        provider_id: &str,
+        endpoint: Option<String>,
+        key: Option<Secret>,
+    ) -> Result<Connection, ConnectionError> {
         let mut settings = self.settings.load()?.settings;
         let connection = Connection {
             id: uuid::Uuid::new_v4().to_string(),
             provider_id: provider_id.to_owned(),
+            endpoint,
         };
 
         if let Some(key) = &key {

@@ -1,5 +1,6 @@
 //! API keys. A `Secret` can't be printed, displayed or serialised, so it can't
-//! reach a log, an error message, a file or the front end by accident.
+//! reach a log, an error message, a file or the front end by accident. It can be
+//! deserialised, so a key the user types arrives straight in a `Secret`.
 
 use std::fmt;
 
@@ -13,6 +14,12 @@ impl Secret {
 
     pub fn expose(&self) -> &str {
         &self.0
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Secret {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        String::deserialize(d).map(Self)
     }
 }
 

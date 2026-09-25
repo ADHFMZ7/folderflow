@@ -56,3 +56,15 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
+      # cargo test regenerates the TypeScript contract types (ts-rs). If that
+      # changed anything, the committed types are out of date.
+      - name: Generated types are up to date
+        working-directory: .
+        run: |
+          changes="$(git status --porcelain src/api/generated)"
+          if [ -n "$changes" ]; then
+            echo "::error::src/api/generated is out of date. Run 'cargo test' in src-tauri and commit the result."
+            echo "$changes"
+            git diff src/api/generated
+            exit 1
+          fi
