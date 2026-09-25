@@ -1,0 +1,7 @@
+.toggle { display: inline-flex; align-items: center; gap: var(--space-3); cursor: pointer; }
+.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.track { position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); transition: background 0.15s; }
+.thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left 0.15s; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
+.toggle input:checked + .track { background: var(--ok); }
+.toggle input:checked + .track .thumb { left: 18px; }
+.toggle input:focus-visible + .track { box-shadow: var(--focus); }

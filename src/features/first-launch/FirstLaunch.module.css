@@ -1,0 +1,16 @@
+.screen { height: 100%; display: grid; place-items: center; padding: var(--space-5); overflow: auto; }
+.card {
+  width: min(600px, 100%); max-height: calc(100vh - 2 * var(--space-5)); display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg);
+}
+.body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6); overflow: auto; }
+.footer { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); }
+.spacer { flex: 1; }
+.lead { color: var(--muted); font-size: var(--fs-lg); margin-bottom: var(--space-2); }
+.icon {
+  width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: var(--space-2);
+  border-radius: 14px; background: var(--accent); color: var(--accent-text); font-size: 30px;
+}
+.points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.points li { display: flex; flex-direction: column; padding-left: var(--space-3); border-left: 3px solid var(--accent); }
+.points span { color: var(--muted); }

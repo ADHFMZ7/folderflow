@@ -1,0 +1,5 @@
+.input {
+  width: 100%; min-width: 0; padding: var(--control-py) var(--space-3); border-radius: var(--radius);
+  background: var(--panel); border: 1px solid var(--line);
+}
+.input:focus-visible { border-color: var(--accent); }

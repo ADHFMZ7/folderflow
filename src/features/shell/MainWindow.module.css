@@ -1,0 +1,4 @@
+.window { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+.page { overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); }
+/* Every page sits in one centred column; pages may narrow it further. */
+.content { width: 100%; max-width: 1040px; margin-inline: auto; }
