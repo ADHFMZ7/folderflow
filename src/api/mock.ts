@@ -1,9 +1,10 @@
-// A stand-in backend that keeps settings in browser storage and fakes detection
-// and key checks. Replaced by the Tauri implementation in step 2.
+// A stand-in backend for the browser, tests and previews. Keeps settings in
+// browser storage and fakes detection and key checks. The app uses tauri.ts.
 
 import type { Api } from "./api";
-import type {
-  Connection, Model, ModelKind, Provider, Settings, Template, WorkflowSummary,
+import {
+  ApiError, type Connection, type Model, type ModelKind, type ModelRef, type Provider, type Settings,
+  type SettingsNotice, type Template, type WorkflowSummary,
 } from "./types";
 
 export const MODEL_KINDS: ModelKind[] = [
@@ -75,6 +76,10 @@ export type MockOptions = {
   delayMs?: number;
   ollamaRunning?: boolean;
   workflows?: WorkflowSummary[];
+  /** Settings already on disk before the app starts. */
+  settings?: Partial<Settings>;
+  /** Pretend the settings file on disk was damaged, or written by a newer version. */
+  storedFile?: "damaged" | "tooNew";
 };
 
 const SETTINGS_KEY = "folderflow.settings";
@@ -84,22 +89,51 @@ function memoryStore(): KeyValueStore {
   return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
 }
 
+/** Follows the same rules as the Rust core; see docs/api-contract.md. */
 export function createMockApi(options: MockOptions = {}): Api {
   const { storage = memoryStore(), delayMs = 400, ollamaRunning = true, workflows = [] } = options;
   const wait = () => new Promise((r) => setTimeout(r, delayMs));
   let connectionCount = 0;
+  // Like the Rust core, a recovery is reported by every getSettings for the rest of the session.
+  const notice: SettingsNotice = options.storedFile === "damaged"
+    ? { kind: "recovered", backup: "~/Library/Application Support/com.adhfmz7.folderflow/settings.damaged-1790300000-3f2a9c1e.json" }
+    : null;
+  if (options.settings) write({ ...FRESH_SETTINGS, ...options.settings });
 
-  const readSettings = (): Settings => {
+  function read(): Settings {
+    if (options.storedFile === "tooNew") {
+      throw new ApiError("too_new", "the settings file is from a newer version of FolderFlow (format 2)");
+    }
     const raw = storage.getItem(SETTINGS_KEY);
     return raw ? { ...FRESH_SETTINGS, ...JSON.parse(raw) } : FRESH_SETTINGS;
-  };
+  }
 
-  const newConnection = (providerId: string): Connection =>
-    ({ id: `${providerId}-${Date.now()}-${++connectionCount}`, providerId });
+  function write(settings: Settings) {
+    storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  const modelsFor = (connection: Connection): Model[] =>
+    (MODELS[connection.providerId] ?? []).map((m) => ({ ...m, connectionId: connection.id }));
+
+  const isWorking = (settings: Settings, ref: ModelRef | null | undefined) =>
+    !!ref && settings.connections.some((c) => c.id === ref.connectionId);
 
   return {
-    async getSettings() { return readSettings(); },
-    async saveSettings(settings) { storage.setItem(SETTINGS_KEY, JSON.stringify(settings)); },
+    async getSettings() {
+      return { settings: read(), notice };
+    },
+
+    async updateSettings(change) {
+      const settings = read();
+      for (const ref of Object.values(change.defaults ?? {})) {
+        if (ref && !settings.connections.some((c) => c.id === ref.connectionId)) {
+          throw new ApiError("invalid", "a default points at a connection that doesn't exist");
+        }
+      }
+      const next = { ...settings, ...change };
+      write(next);
+      return next;
+    },
 
     async listModelKinds() { return MODEL_KINDS; },
     async listProviders() { return PROVIDERS; },
@@ -113,19 +147,45 @@ export function createMockApi(options: MockOptions = {}): Api {
     async connect(providerId, credentials) {
       await wait();
       const provider = PROVIDERS.find((p) => p.id === providerId);
-      if (!provider) return { ok: false, error: "Unknown provider." };
-      if (provider.connect === "detect" && !ollamaRunning) return { ok: false, error: "Ollama isn't running on this Mac." };
+      if (!provider) throw new ApiError("not_found", `no provider with id ${providerId}`);
+      if (provider.connect === "detect" && !ollamaRunning) return { ok: false, error: "Couldn't reach Ollama." };
+      if (provider.connect === "apiKey" && !(credentials.apiKey ?? "").trim()) return { ok: false, error: "Enter an API key." };
       if (provider.connect === "apiKey" && (credentials.apiKey ?? "").trim().length < 12)
         return { ok: false, error: "That key was rejected. Check it and try again." };
       if (provider.connect === "endpoint" && !/^https?:\/\//.test(credentials.endpoint ?? ""))
         return { ok: false, error: "Enter an address starting with http:// or https://." };
-      return { ok: true, connection: newConnection(providerId) };
+
+      // The key itself would go to the Keychain; the mock keeps nothing of it.
+      const settings = read();
+      const connection: Connection = { id: `${providerId}-${Date.now()}-${++connectionCount}`, providerId };
+      const connections = [...settings.connections, connection];
+      const withConnection = { ...settings, connections };
+      const defaults = { ...settings.defaults };
+      for (const kind of MODEL_KINDS) {
+        if (isWorking(withConnection, defaults[kind.id])) continue;
+        const first = modelsFor(connection).find((m) => m.kind === kind.id);
+        defaults[kind.id] = first ? { connectionId: connection.id, modelId: first.id } : null;
+      }
+      const next = { ...withConnection, defaults };
+      write(next);
+      return { ok: true, connection, settings: next };
+    },
+
+    async removeConnection(id) {
+      const settings = read();
+      if (!settings.connections.some((c) => c.id === id)) throw new ApiError("not_found", `no connection with id ${id}`);
+      const defaults = Object.fromEntries(
+        Object.entries(settings.defaults).map(([kind, ref]) => [kind, ref?.connectionId === id ? null : ref]),
+      );
+      const next = { ...settings, connections: settings.connections.filter((c) => c.id !== id), defaults };
+      write(next);
+      return next;
     },
 
     async listModels(connectionId) {
-      const connection = readSettings().connections.find((c) => c.id === connectionId);
-      const providerId = connection?.providerId ?? connectionId.split("-")[0];
-      return (MODELS[providerId] ?? []).map((m): Model => ({ ...m, connectionId }));
+      const connection = read().connections.find((c) => c.id === connectionId);
+      if (!connection) throw new ApiError("not_found", `no connection with id ${connectionId}`);
+      return modelsFor(connection);
     },
 
     async listWorkflows() { return workflows; },

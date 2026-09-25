@@ -4,7 +4,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import type { Connection, Provider } from "../../api/types";
 import { useSettings } from "../../settings/SettingsProvider";
-import { Badge, Field, Select } from "../../ui";
+import { Badge, Button, Field, Select } from "../../ui";
 import { ConnectProvider } from "./ConnectProvider";
 import { findModel } from "./defaults";
 import styles from "./models.module.css";
@@ -15,20 +15,64 @@ const GROUPS: { location: Provider["location"]; title: string }[] = [
 ];
 
 export function ModelSetup() {
-  const { providers, settings, addConnection } = useSettings();
+  const { providers, settings } = useSettings();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [disconnected, setDisconnected] = useState<string | null>(null);
 
-  const connected = (providerId: string) => settings.connections.some((c) => c.providerId === providerId);
-  const onConnected = async (connection: Connection) => {
-    await addConnection(connection);
-    setOpenId(null);
+  const connectionsOf = (providerId: string) => settings.connections.filter((c) => c.providerId === providerId);
+  const toggle = (id: string) => {
+    setOpenId(openId === id ? null : id);
+    setDisconnected(null);
+  };
+
+  const renderOpen = (p: Provider) => {
+    const connections = connectionsOf(p.id);
+    if (connections.length) return <ConnectedPanel provider={p} connections={connections} onDisconnected={() => setDisconnected(p.id)} />;
+    return (
+      <>
+        {disconnected === p.id && <p className={styles.notice}>{p.name} isn't connected.</p>}
+        <ConnectProvider provider={p} onConnected={() => setOpenId(null)} />
+      </>
+    );
   };
 
   return (
     <div className={styles.stack}>
-      <ProviderList providers={providers} openId={openId} onToggle={(id) => setOpenId(openId === id ? null : id)}
-        isConnected={connected} renderOpen={(p) => <ConnectProvider provider={p} onConnected={onConnected} />} />
+      <ProviderList providers={providers} openId={openId} onToggle={toggle}
+        isConnected={(id) => connectionsOf(id).length > 0} renderOpen={renderOpen} />
       {settings.connections.length > 0 && <KindDefaults />}
+    </div>
+  );
+}
+
+/** A connected provider: disconnecting asks first, since steps using it will stop. */
+function ConnectedPanel({ provider, connections, onDisconnected }: {
+  provider: Provider; connections: Connection[]; onDisconnected: () => void;
+}) {
+  const { removeConnection } = useSettings();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const disconnect = async () => {
+    setBusy(true);
+    for (const c of connections) await removeConnection(c.id);
+    onDisconnected();
+  };
+
+  return (
+    <div className={styles.connect}>
+      <p className={styles.ok}>✓ {provider.name} is connected</p>
+      {confirming ? (
+        <div className={styles.stack}>
+          <p>Steps that use {provider.name} will stop until you connect a provider again.{provider.connect === "apiKey" ? " Its key will be removed from the Keychain." : ""}</p>
+          <div className={styles.row}>
+            <Button variant="danger" onClick={disconnect} disabled={busy}>Disconnect {provider.name}</Button>
+            <Button variant="secondary" onClick={() => setConfirming(false)} disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.row}><Button variant="secondary" onClick={() => setConfirming(true)}>Disconnect</Button></div>
+      )}
     </div>
   );
 }

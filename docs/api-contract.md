@@ -1,0 +1,39 @@
+# Api contract
+
+How the front end talks to the Rust core. Screens call the `Api` interface in `src/api/api.ts`. In the app, `src/api/tauri.ts` turns each call into a Tauri command; in the browser, tests and previews, `src/api/mock.ts` implements the same behaviour.
+
+JSON field names are camelCase. Tauri maps a command's snake_case parameters to camelCase keys, so `detect(provider_id)` is invoked as `invoke("detect", { providerId })`.
+
+## Commands
+
+| Api method | Command | Arguments | Returns |
+| --- | --- | --- | --- |
+| `getSettings()` | `get_settings` | none | `LoadedSettings` |
+| `updateSettings(change)` | `update_settings` | `change: SettingsChange` | `Settings` |
+| `listModelKinds()` | `list_model_kinds` | none | `ModelKind[]` |
+| `listProviders()` | `list_providers` | none | `Provider[]` |
+| `detect(providerId)` | `detect` | `providerId` | `DetectResult` |
+| `connect(providerId, credentials)` | `connect` | `providerId`, `credentials` | `ConnectOutcome` |
+| `removeConnection(id)` | `remove_connection` | `id` | `Settings` |
+| `listModels(connectionId)` | `list_models` | `connectionId` | `Model[]` |
+| `listWorkflows()` | `list_workflows` | none | `WorkflowSummary[]` |
+| `listTemplates()` | `list_templates` | none | `Template[]` |
+
+## Rules
+
+- **Rust owns connections.** The front end never writes `connections`. `connect` checks the credentials with the provider, stores the key in the Keychain, saves the connection, and gives every kind without a working default the first model of that kind from the new connection. `removeConnection` deletes the key first, then the connection, and clears defaults that used it.
+- **Keys travel one way.** A key goes from the front end to Rust once, inside `connect`. No command returns a key.
+- **Partial updates.** `updateSettings` takes only `setupComplete`, `openAtLogin` and `defaults` (which replaces the whole map), applies them under one lock, and returns the result. A default that points at a connection that doesn't exist is rejected with `invalid`.
+- **Expected refusals are values.** A rejected key, an unreachable provider or bad input comes back as `{ ok: false, error }` from `connect`, or `{ found: false, reason }` from `detect`.
+- **Failures are `ApiError`s** with a `code` and a key-free `message`:
+
+  | Code | Meaning |
+  | --- | --- |
+  | `too_new` | The settings file comes from a newer FolderFlow and was left untouched |
+  | `not_found` | Unknown provider or connection |
+  | `invalid` | The request breaks a rule, such as a default pointing at a missing connection |
+  | `keychain` | The Keychain refused a request |
+  | `provider` | A provider failed in a way that isn't an expected refusal |
+  | `io` | Reading or writing a file failed |
+
+- **Load notices.** `getSettings` returns `notice: { kind: "recovered", backup }` when the settings file was unreadable and was moved aside, and keeps returning it for the rest of the session, so a second call (React Strict Mode, a remount) can't lose it. Dismissing it only hides it in the UI. A file from a newer version fails with `too_new`, and the UI blocks until the user opens a newer FolderFlow.
