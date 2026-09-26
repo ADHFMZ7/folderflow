@@ -10,7 +10,7 @@ use folderflow_lib::api::types::{
     ApiError, ConnectOutcome, Credentials, DetectResult, ErrorCode, LoadedSettings, Model,
     SettingsChange, SettingsNotice, WorkflowStatus, WorkflowSummary,
 };
-use folderflow_lib::storage::settings::{Connection, ModelRef, Settings};
+use folderflow_lib::storage::settings::{Appearance, Connection, ModelRef, Settings};
 use serde_json::{json, Value};
 
 fn to_json<T: serde::Serialize>(value: &T) -> Value {
@@ -47,9 +47,16 @@ fn loaded_settings_has_settings_and_a_null_notice() {
 
     assert_eq!(keys(&json), ["notice", "settings"]);
     assert!(json["notice"].is_null());
+    assert_eq!(json["settings"]["appearance"], "system");
     assert_eq!(
         keys(&json["settings"]),
-        ["connections", "defaults", "openAtLogin", "setupComplete"]
+        [
+            "appearance",
+            "connections",
+            "defaults",
+            "openAtLogin",
+            "setupComplete"
+        ]
     );
 }
 
@@ -94,12 +101,14 @@ fn settings_change_fields_are_all_optional() {
     let change: SettingsChange = serde_json::from_value(json!({
         "setupComplete": true,
         "openAtLogin": false,
+        "appearance": "dark",
         "defaults": { "llm": { "connectionId": "c1", "modelId": "m" }, "system1": null }
     }))
     .unwrap();
 
     assert_eq!(change.setup_complete, Some(true));
     assert_eq!(change.open_at_login, Some(false));
+    assert_eq!(change.appearance, Some(Appearance::Dark));
     assert_eq!(
         change.defaults,
         Some(BTreeMap::from([

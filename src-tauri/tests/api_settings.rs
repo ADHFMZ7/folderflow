@@ -11,7 +11,9 @@ use folderflow_lib::api::catalog;
 use folderflow_lib::api::types::{ErrorCode, SettingsChange, SettingsNotice};
 use folderflow_lib::storage::connections::Connections;
 use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
+use folderflow_lib::storage::settings::{
+    Appearance, Connection, ModelRef, Settings, SettingsStore,
+};
 
 use common::api::{offline_harness, Harness};
 
@@ -130,6 +132,27 @@ fn update_applies_only_the_fields_it_names() {
     assert_eq!(after.open_at_login, before.open_at_login);
     assert_eq!(after.connections, before.connections);
     assert_eq!(store(&h).load().unwrap().settings, after);
+}
+
+#[test]
+fn appearance_can_be_changed_and_is_kept() {
+    let h = offline_harness();
+    let before = with_connection(&h, "c1");
+
+    let after = h
+        .backend
+        .update_settings(SettingsChange {
+            appearance: Some(Appearance::Light),
+            ..SettingsChange::default()
+        })
+        .unwrap();
+
+    assert_eq!(after.appearance, Appearance::Light);
+    assert_eq!(after.connections, before.connections);
+    assert_eq!(
+        store(&h).load().unwrap().settings.appearance,
+        Appearance::Light
+    );
 }
 
 #[test]

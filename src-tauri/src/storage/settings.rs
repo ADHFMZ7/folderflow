@@ -21,6 +21,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub setup_complete: bool,
     pub open_at_login: bool,
+    pub appearance: Appearance,
     pub connections: Vec<Connection>,
     /// The model each kind uses unless a step overrides it, keyed by kind id.
     pub defaults: BTreeMap<String, Option<ModelRef>>,
@@ -31,10 +32,22 @@ impl Default for Settings {
         Self {
             setup_complete: false,
             open_at_login: true,
+            appearance: Appearance::System,
             connections: Vec::new(),
             defaults: BTreeMap::new(),
         }
     }
+}
+
+/// Light or dark, or whichever the Mac is using.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Appearance {
+    #[default]
+    System,
+    Light,
+    Dark,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

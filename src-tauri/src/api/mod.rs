@@ -77,6 +77,9 @@ impl<P: ProviderClient> Backend<P> {
         if let Some(v) = change.open_at_login {
             settings.open_at_login = v;
         }
+        if let Some(v) = change.appearance {
+            settings.appearance = v;
+        }
         if let Some(defaults) = change.defaults {
             let unknown = defaults
                 .values()

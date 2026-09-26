@@ -6,13 +6,15 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use folderflow_lib::storage::settings::{
-    Connection, LoadOutcome, ModelRef, Settings, SettingsError, SettingsStore, SETTINGS_VERSION,
+    Appearance, Connection, LoadOutcome, ModelRef, Settings, SettingsError, SettingsStore,
+    SETTINGS_VERSION,
 };
 
 fn sample() -> Settings {
     Settings {
         setup_complete: true,
         open_at_login: false,
+        appearance: Appearance::Dark,
         connections: vec![Connection {
             id: "c1".into(),
             provider_id: "ollama".into(),
@@ -67,6 +69,7 @@ fn the_file_uses_the_field_names_the_front_end_expects() {
     assert_eq!(json["version"], SETTINGS_VERSION);
     assert_eq!(json["setupComplete"], true);
     assert_eq!(json["openAtLogin"], false);
+    assert_eq!(json["appearance"], "dark");
     assert_eq!(json["connections"][0]["providerId"], "ollama");
     assert_eq!(json["defaults"]["llm"]["connectionId"], "c1");
     assert_eq!(json["defaults"]["llm"]["modelId"], "qwen3.5:9b");
@@ -88,6 +91,21 @@ fn fields_missing_from_the_file_get_their_defaults() {
     assert!(loaded.settings.setup_complete);
     assert!(loaded.settings.open_at_login);
     assert!(loaded.settings.connections.is_empty());
+}
+
+#[test]
+fn settings_saved_before_appearance_existed_follow_the_system() {
+    let (_tmp, dir) = common::data_dir();
+    fs::write(
+        dir.settings_path(),
+        r#"{ "version": 1, "setupComplete": true, "openAtLogin": false }"#,
+    )
+    .unwrap();
+
+    let loaded = SettingsStore::new(&dir).load().unwrap();
+
+    assert_eq!(loaded.outcome, LoadOutcome::Loaded);
+    assert_eq!(loaded.settings.appearance, Appearance::System);
 }
 
 #[test]

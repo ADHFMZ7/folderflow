@@ -8,6 +8,7 @@ import {
   ApiError, type ConnectOutcome, type Credentials, type Model, type ModelKind, type Provider, type Settings,
   type SettingsChange, type SettingsNotice,
 } from "../api/types";
+import { applyAppearance } from "../theme/appearance";
 import { SettingsProblem } from "./SettingsProblem";
 
 type SettingsState = {
@@ -71,6 +72,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     })();
     return () => { live = false; };
   }, [api]);
+
+  const appearance = loaded?.settings.appearance;
+  useEffect(() => { if (appearance) applyAppearance(appearance); }, [appearance]);
 
   const setSettings = useCallback((settings: Settings, models?: (m: Model[]) => Model[]) =>
     setLoaded((cur) => cur && { ...cur, settings, models: models ? models(cur.models) : cur.models }), []);

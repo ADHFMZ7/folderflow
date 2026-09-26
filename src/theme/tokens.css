@@ -1,28 +1,30 @@
 /* Design tokens: the Paper look in the Cobalt palette (see the UX spec, "Visual direction").
-   Components use these variables only; no colour or size is written anywhere else. */
+   Components use these variables only; no colour or size is written anywhere else.
+   Each colour is light-dark(light, dark). The page follows the Mac unless the
+   Appearance setting puts data-theme on <html> (src/theme/appearance.ts). */
 
 :root {
   color-scheme: light dark;
 
-  --bg: #eceff3;
-  --panel: #f7f8fa;
-  --panel-2: #e3e7ed;
-  --text: #121a2b;
-  --muted: #56617a;
-  --line: #c9d0dc;
-  --accent: #1f47d6;
-  --accent-text: #ffffff;
+  --bg: light-dark(#eceff3, #10141c);
+  --panel: light-dark(#f7f8fa, #171c26);
+  --panel-2: light-dark(#e3e7ed, #1c2230);
+  --text: light-dark(#121a2b, #e6eaf2);
+  --muted: light-dark(#56617a, #8e98ad);
+  --line: light-dark(#c9d0dc, #2a3242);
+  --accent: light-dark(#1f47d6, #5b7cff);
+  --accent-text: light-dark(#ffffff, #0b0f17);
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --ok: #1d7a55;
-  --warn: #a8660b;
-  --danger: #c0283a;
+  --ok: light-dark(#1d7a55, #4fbf8e);
+  --warn: light-dark(#a8660b, #e2a24a);
+  --danger: light-dark(#c0283a, #f06a7a);
 
   /* Window surfaces (the Sheet style): the title bar area and sidebar share one
      tone, and each page sits on a raised sheet. Separation comes from tone and
      hairlines, not borders. */
-  --chrome: #e4e8ee;
-  --sheet: #fbfcfd;
-  --card: #f3f5f8;
+  --chrome: light-dark(#e4e8ee, #0b0e14);
+  --sheet: light-dark(#fbfcfd, #161b24);
+  --card: light-dark(#f3f5f8, #1c2230);
   --hairline: color-mix(in srgb, var(--line) 55%, transparent);
   --select: color-mix(in srgb, var(--text) 7%, transparent);
   /* The macOS traffic lights sit over the top-left corner (overlay title bar).
@@ -32,11 +34,11 @@
   --traffic-lights-left: 15px;
   --traffic-lights-width: 60px;
 
-  --kind-trigger: #1f47d6;
-  --kind-ai: #6b3fc4;
-  --kind-action: #1d7a55;
-  --kind-logic: #a8660b;
-  --kind-human: #c0283a;
+  --kind-trigger: light-dark(#1f47d6, #6f8dff);
+  --kind-ai: light-dark(#6b3fc4, #a384f0);
+  --kind-action: light-dark(#1d7a55, #4fbf8e);
+  --kind-logic: light-dark(#a8660b, #e2a24a);
+  --kind-human: light-dark(#c0283a, #f06a7a);
 
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --fs: 15px;
@@ -64,28 +66,5 @@
   --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #10141c;
-    --panel: #171c26;
-    --panel-2: #1c2230;
-    --text: #e6eaf2;
-    --muted: #8e98ad;
-    --line: #2a3242;
-    --accent: #5b7cff;
-    --accent-text: #0b0f17;
-    --ok: #4fbf8e;
-    --warn: #e2a24a;
-    --danger: #f06a7a;
-
-    --chrome: #0b0e14;
-    --sheet: #161b24;
-    --card: #1c2230;
-
-    --kind-trigger: #6f8dff;
-    --kind-ai: #a384f0;
-    --kind-action: #4fbf8e;
-    --kind-logic: #e2a24a;
-    --kind-human: #f06a7a;
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
