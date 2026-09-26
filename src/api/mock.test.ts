@@ -217,6 +217,20 @@ describe("workflows", () => {
     const wf = await api().createWorkflow(null);
     expect((await api().validateWorkflow({ ...wf, steps: [] })).map((p) => p.code)).toEqual(["no_trigger"]);
   });
+
+  it("reports empty required text fields with the field they're about, as Rust does", async () => {
+    const wf = await api().createWorkflow(null);
+    const t = wf.steps[0];
+    const steps = [
+      { ...t, folder: " ", next: "m" },
+      { id: "m", type: "move", title: "Move", position: { x: 0, y: 0 }, to: "", mode: "move", next: null },
+    ] as typeof wf.steps;
+    const problems = await api().validateWorkflow({ ...wf, steps });
+    expect(problems).toEqual([
+      { stepId: t.id, code: "required", message: "Fill in the folder to watch.", field: "folder" },
+      { stepId: "m", code: "required", message: "Fill in the folder to move to.", field: "to" },
+    ]);
+  });
 });
 
 describe("templates", () => {

@@ -148,7 +148,20 @@ export function damagedSummary(fileName: string): WorkflowSummary {
   return { id: fileName, name: fileName, trigger: "", enabled: false, lastRun: null, needsYou: 0, kindsNeeded: [], status: "damaged", hasDraft: false };
 }
 
-/** A small part of the real rules: triggers and exits that point nowhere. */
+/** Required text fields, as Rust words them: [field, what to fill in]. */
+const REQUIRED_TEXT: Partial<Record<Step["type"], [string, string][]>> = {
+  fileAdded: [["folder", "the folder to watch"]],
+  write: [["instruction", "what to write"], ["saveAs", "the name to save the text as"]],
+  agent: [["instruction", "the instruction"]],
+  rename: [["template", "the new name"]],
+  move: [["to", "the folder to move to"]],
+  createFile: [["name", "the new file's name"]],
+  addRow: [["file", "the spreadsheet file"]],
+  notify: [["message", "the message"]],
+  askMe: [["question", "the question"]],
+};
+
+/** A small part of the real rules: triggers, exits that point nowhere, and empty required text. */
 export function roughValidate(wf: Workflow): Problem[] {
   const problems: Problem[] = [];
   const triggers = wf.steps.filter((s) => TRIGGERS.includes(s.type));
@@ -159,6 +172,14 @@ export function roughValidate(wf: Workflow): Problem[] {
     const exits = "next" in s ? [s.next] : "branches" in s ? Object.values(s.branches) : [];
     for (const to of exits) {
       if (to && !ids.has(to)) problems.push({ stepId: s.id, code: "missing_step", message: "This step leads to a step that no longer exists." });
+    }
+  }
+  for (const s of wf.steps) {
+    for (const [field, what] of REQUIRED_TEXT[s.type] ?? []) {
+      const value = (s as unknown as Record<string, unknown>)[field];
+      if (typeof value === "string" && !value.trim()) {
+        problems.push({ stepId: s.id, code: "required", message: `Fill in ${what}.`, field });
+      }
     }
   }
   return problems;

@@ -9,4 +9,5 @@ export { ProgressDots } from "./ProgressDots";
 export { Segmented } from "./Segmented";
 export { Spinner } from "./Spinner";
 export { Select, TextInput } from "./TextInput";
+export { TextArea } from "./TextArea";
 export { Toggle } from "./Toggle";

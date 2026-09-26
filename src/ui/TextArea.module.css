@@ -1,0 +1,5 @@
+.area {
+  width: 100%; min-width: 0; padding: var(--control-py) var(--space-3); border-radius: var(--radius);
+  background: var(--panel); border: 1px solid var(--line); color: inherit; font: inherit; line-height: 1.4; resize: vertical;
+}
+.area:focus-visible { border-color: var(--accent); }
