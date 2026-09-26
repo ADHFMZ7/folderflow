@@ -32,7 +32,8 @@ describe("studio", () => {
     await openWorkflow();
     expect(screen.getByRole("textbox", { name: "Workflow name" })).toHaveValue("Tidy screenshots");
     for (const title of ["When an image lands on the Desktop", "Is it a screenshot?", "Move to Screenshots"]) {
-      expect(within(canvas()).getByText(title)).toBeInTheDocument();
+      // React Flow draws cards after the first render.
+      expect(await within(canvas()).findByText(title)).toBeInTheDocument();
     }
   });
 

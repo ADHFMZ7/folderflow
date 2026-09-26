@@ -25,9 +25,12 @@
   --card: #f3f5f8;
   --hairline: color-mix(in srgb, var(--line) 55%, transparent);
   --select: color-mix(in srgb, var(--text) 7%, transparent);
-  /* The macOS traffic lights sit over the top-left corner (overlay title bar). */
+  /* The macOS traffic lights sit over the top-left corner (overlay title bar).
+     tauri.conf.json places them (trafficLightPosition x 15, y 24): 14px lights
+     from x 15 to 75, centred 22px down, the middle of the title bar. */
   --titlebar-height: 44px;
-  --traffic-lights-width: 52px;
+  --traffic-lights-left: 15px;
+  --traffic-lights-width: 60px;
 
   --kind-trigger: #1f47d6;
   --kind-ai: #6b3fc4;

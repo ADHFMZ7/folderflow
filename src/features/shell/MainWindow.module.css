@@ -1,8 +1,20 @@
-.window { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100%; }
-.collapsed { grid-template-columns: 72px minmax(0, 1fr); }
-/* The page sits on a sheet inset from the chrome. */
+.window {
+  display: grid; height: 100%;
+  grid-template-columns: 220px minmax(0, 1fr); grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
+}
+.collapsed { grid-template-columns: 56px minmax(0, 1fr); }
+/* Spans the window. The traffic lights come first, then the sidebar button at a
+   fixed spot, both centred in the bar. */
+.titleBar { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); padding-left: var(--traffic-lights-left); }
+.lights { width: var(--traffic-lights-width); height: 14px; flex-shrink: 0; }
+.menu {
+  display: grid; place-items: center; width: 30px; height: 28px; flex-shrink: 0; padding: 0;
+  color: var(--muted); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.menu:hover { color: var(--text); background: var(--select); }
+/* The page sits on a sheet inset from the chrome, below the title bar. */
 .sheet {
-  display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 8px 8px 8px 0; overflow: hidden;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 0 8px 8px 0; overflow: hidden;
   background: var(--sheet); border: 1px solid var(--hairline); border-radius: 12px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.05);
 }
