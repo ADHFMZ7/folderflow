@@ -2,7 +2,7 @@
 .center { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6); }
 .toolbar {
   display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4);
-  background: var(--panel); border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--hairline);
 }
 .back { color: var(--accent); font-weight: 550; text-decoration: none; white-space: nowrap; }
 .back::before { content: "← "; }
@@ -19,18 +19,19 @@
 .body { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
 
 /* palette */
-.palette { overflow: auto; padding: var(--space-2) var(--space-3) var(--space-5); background: var(--panel-2); border-right: 1px solid var(--line); }
+.palette { overflow: auto; padding: var(--space-2) var(--space-3) var(--space-5); }
 .paletteTitle { margin: var(--space-3) 0 var(--space-1); font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: var(--tracking-label); }
 .paletteItem {
   display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: 6px var(--space-2); border: 0; border-radius: var(--radius-sm);
   background: transparent; text-align: left; cursor: grab;
 }
-.paletteItem:hover { background: var(--panel); }
+.paletteItem:hover { background: var(--select); }
 .hint { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-3); }
 
 /* canvas */
-.canvas { position: relative; min-width: 0; }
-.canvas :global(.react-flow) { --xy-background-color: var(--bg); --xy-edge-stroke: var(--muted); --xy-controls-button-background-color: var(--panel); --xy-controls-button-color: var(--text); --xy-minimap-background-color: var(--panel); --xy-minimap-mask-background-color: rgb(128 128 128 / 0.2); }
+/* The canvas is a soft inset panel on the sheet. */
+.canvas { position: relative; min-width: 0; margin: var(--space-2) 0; border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
+.canvas :global(.react-flow) { --xy-background-color: var(--card); --xy-edge-stroke: var(--muted); --xy-controls-button-background-color: var(--panel); --xy-controls-button-color: var(--text); --xy-minimap-background-color: var(--panel); --xy-minimap-mask-background-color: rgb(128 128 128 / 0.2); }
 .canvas :global(.react-flow__edge-text) { fill: var(--muted); font-size: 12px; }
 .canvas :global(.react-flow__edge-textbg) { fill: var(--bg); }
 .canvas :global(.react-flow__edge.selected path) { stroke: var(--accent); stroke-width: 2; }
@@ -46,8 +47,9 @@
   background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); font-size: var(--fs-xs); font-weight: 700;
 }
 .node {
-  width: 260px; padding: var(--space-2) var(--space-3) var(--space-3); background: var(--panel);
-  border: 1px solid var(--line); border-top: 4px solid var(--k); border-radius: var(--radius);
+  width: 260px; padding: var(--space-2) var(--space-3) var(--space-3); background: var(--sheet);
+  border: 1px solid var(--hairline); border-top: 4px solid var(--k); border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 .selected { outline: 2px solid var(--accent); }
 .hasProblem { border-color: var(--danger); }
@@ -60,11 +62,11 @@
 .branchLabels span { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* inspector */
-.inspector { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); background: var(--panel); border-left: 1px solid var(--line); }
+.inspector { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-left: 1px solid var(--hairline); }
 .problems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .problem {
   display: flex; flex-direction: column; gap: 2px; width: 100%; padding: var(--space-2) var(--space-3); text-align: left;
-  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--danger); border-radius: var(--radius-sm); font: inherit;
+  background: var(--card); border: 1px solid transparent; border-left: 3px solid var(--danger); border-radius: var(--radius-sm); font: inherit;
 }
 button.problem { cursor: pointer; }
 .problem span { color: var(--muted); font-size: var(--fs-sm); }

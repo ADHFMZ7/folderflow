@@ -14,13 +14,15 @@ describe("sidebar", () => {
 
     await user.click(hide);
 
-    expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
+    // Collapsed to a rail of icons: the links stay, named by their labels, but the text goes.
+    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("title", "Settings");
     const show = screen.getByRole("button", { name: "Show sidebar" });
     expect(show).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("heading", { name: "Workflows" })).toBeInTheDocument();
 
     await user.click(show);
-    expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
   it("remembers the choice the next time the app opens", async () => {
@@ -31,7 +33,7 @@ describe("sidebar", () => {
     renderApp(home);
 
     expect(await screen.findByRole("button", { name: "Show sidebar" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 
   it("still shows that something needs you while collapsed", async () => {
@@ -44,6 +46,12 @@ describe("sidebar", () => {
     expect(within(nav).getByLabelText("1 workflow needs you")).toHaveTextContent("1");
   });
 
+  it("lets the window be moved from its top row, since the title bar is hidden", async () => {
+    renderApp(home);
+    const hide = await screen.findByRole("button", { name: "Hide sidebar" });
+    expect(hide.parentElement).toHaveAttribute("data-tauri-drag-region");
+  });
+
   it("works from inside the editor too", async () => {
     const { user, api } = renderApp(home);
     const wf = await api.createWorkflow("screenshots");
@@ -52,7 +60,7 @@ describe("sidebar", () => {
 
     await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
 
-    expect(screen.queryByRole("link", { name: "Workflows" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Workflows")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Workflow name" })).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
-// The main window: sidebar on the left, the current page on the right.
+// The main window: the sidebar on the window chrome, and the current page on a
+// raised sheet beside it.
 
 import { useRoute } from "../../app/routes";
 import { HistoryPage } from "../history/HistoryPage";
@@ -18,22 +19,25 @@ export function MainWindow() {
   const sidebar = useSidebarCollapsed();
 
   return (
-    <div className={sidebar.collapsed ? `${styles.window} ${styles.collapsed}` : styles.window}>
+    // The chrome between the sidebar and the sheet moves the window when dragged.
+    <div className={sidebar.collapsed ? `${styles.window} ${styles.collapsed}` : styles.window} data-tauri-drag-region>
       <Sidebar current={route.page === "workflow" ? "workflows" : route.page} needsYou={needsYou}
         collapsed={sidebar.collapsed} onToggle={sidebar.toggle} />
-      {route.page === "workflow" ? (
-        // The editor takes the whole area, with no page padding or scrolling of its own.
-        <main className={styles.editor}><Studio key={route.id} id={route.id} /></main>
-      ) : (
-      <main className={styles.page}>
-        <div className={styles.content}>
-          {route.page === "workflows" && <WorkflowsPage {...workflows} />}
-          {route.page === "history" && <HistoryPage />}
-          {route.page === "templates" && <TemplatesPage templates={workflows.templates} onUse={workflows.create} />}
-          {route.page === "settings" && <SettingsPage />}
-        </div>
-      </main>
-      )}
+      <div className={styles.sheet}>
+        {route.page === "workflow" ? (
+          // The editor takes the whole sheet, with no page padding or scrolling of its own.
+          <main className={styles.editor}><Studio key={route.id} id={route.id} /></main>
+        ) : (
+          <main className={styles.page}>
+            <div className={styles.content}>
+              {route.page === "workflows" && <WorkflowsPage {...workflows} />}
+              {route.page === "history" && <HistoryPage />}
+              {route.page === "templates" && <TemplatesPage templates={workflows.templates} onUse={workflows.create} />}
+              {route.page === "settings" && <SettingsPage />}
+            </div>
+          </main>
+        )}
+      </div>
     </div>
   );
 }

@@ -10,7 +10,15 @@ export function Root() {
   return (
     <div className={styles.root}>
       <SettingsNoticeBanner />
-      <div className={styles.view}>{settings.setupComplete ? <MainWindow /> : <FirstLaunch />}</div>
+      <div className={styles.view}>
+        {settings.setupComplete ? <MainWindow /> : (
+          <>
+            {/* First launch has no top bar; this strip still moves the window. */}
+            <div className="window-drag-strip" data-tauri-drag-region />
+            <FirstLaunch />
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ export function SettingsProblem({ error }: { error: ApiError }) {
   const tooNew = error.code === "too_new";
   return (
     <main className={styles.screen}>
+      <div className="window-drag-strip" data-tauri-drag-region />
       <section className={styles.card} aria-labelledby="problem-title">
         <h1 id="problem-title">{tooNew ? "These settings need a newer FolderFlow" : "FolderFlow couldn't open its settings"}</h1>
         <p className={styles.body}>
