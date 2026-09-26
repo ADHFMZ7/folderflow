@@ -17,6 +17,7 @@ import type { ErrorCode as GErrorCode } from "./generated/ErrorCode";
 import type { Workflow as GWorkflow } from "./generated/Workflow";
 import type { Step as GStep } from "./generated/Step";
 import type { Branch as GBranch } from "./generated/Branch";
+import type { Category as GCategory } from "./generated/Category";
 import type { Position as GPosition } from "./generated/Position";
 import type { Schedule as GSchedule } from "./generated/Schedule";
 import type { Field as GField } from "./generated/Field";
@@ -45,6 +46,7 @@ export type ContractChecks = [
   Check<Same<GWorkflow, T.Workflow>>,
   Check<Same<GStep, T.Step>>,
   Check<Same<GBranch, T.Branch>>,
+  Check<Same<GCategory, T.Category>>,
   Check<Same<GPosition, T.Position>>,
   Check<Same<GSchedule, T.Schedule>>,
   Check<Same<GField, T.Field>>,

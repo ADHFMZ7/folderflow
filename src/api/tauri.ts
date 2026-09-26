@@ -39,6 +39,8 @@ export function createTauriApi(): Api {
     saveWorkflow: (workflow) => call("save_workflow", { workflow }),
     deleteWorkflow: (id) => call("delete_workflow", { id }),
     validateWorkflow: (workflow) => call("validate_workflow", { workflow }),
+    chooseFolder: (start) => call("choose_folder", { start: start ?? null }),
+    chooseCsv: (start) => call("choose_csv", { start: start ?? null }),
   };
 }
 

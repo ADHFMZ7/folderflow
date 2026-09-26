@@ -218,3 +218,39 @@ describe("workflows", () => {
     expect((await api().validateWorkflow({ ...wf, steps: [] })).map((p) => p.code)).toEqual(["no_trigger"]);
   });
 });
+
+describe("templates", () => {
+  it("offers the same templates as the Rust catalog, and builds each one", async () => {
+    const a = api();
+    const list = await a.listTemplates();
+    expect(list.map((t) => t.id)).toEqual(["receipts", "screenshots", "summaries", "invoices", "cleanup", "paperwork"]);
+    expect(list.find((t) => t.id === "cleanup")!.blurb).toBe("Every Friday at 17:00, a reminder to tidy Downloads");
+    for (const t of list) expect((await a.createWorkflow(t.id)).name).toBe(t.name);
+  });
+
+  it("builds the Paperwork inbox with every step type but the other triggers", async () => {
+    const wf = await api().createWorkflow("paperwork");
+    const types = [...new Set(wf.steps.map((s) => s.type))].sort();
+    expect(types).toEqual(["addRow", "agent", "askMe", "classify", "createFile", "extract", "fileAdded", "if", "move", "notify", "rename", "stop", "tag", "write"]);
+    const classify = wf.steps.find((s) => s.type === "classify");
+    expect(classify?.type === "classify" && classify.categories.every((c) => c.description)).toBe(true);
+    const ids = new Set(wf.steps.map((s) => s.id));
+    for (const s of wf.steps) {
+      const exits = "next" in s ? [s.next] : "branches" in s ? Object.values(s.branches) : [];
+      for (const to of exits) if (to) expect(ids).toContain(to);
+    }
+  });
+});
+
+describe("pickers", () => {
+  it("answers with the folder or file set in the options, or null for a cancel", async () => {
+    expect(await api({ chosenFolder: "~/Documents/Receipts" }).chooseFolder()).toBe("~/Documents/Receipts");
+    expect(await api({ chosenFolder: null }).chooseFolder()).toBeNull();
+    expect(await api({ chosenCsv: "~/Documents/Expenses.csv" }).chooseCsv()).toBe("~/Documents/Expenses.csv");
+  });
+
+  it("answers with a sample path in previews", async () => {
+    expect(await api().chooseFolder()).toBe("~/Documents");
+    expect(await api().chooseCsv()).toBe("~/Documents/Log.csv");
+  });
+});

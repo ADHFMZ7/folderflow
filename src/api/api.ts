@@ -36,6 +36,11 @@ export interface Api {
   /** Moves the workflow's file to the trash. */
   deleteWorkflow(id: string): Promise<void>;
   validateWorkflow(workflow: Workflow): Promise<Problem[]>;
+
+  // Native pickers: a path with the home folder written as ~, or null if cancelled.
+  chooseFolder(start?: string): Promise<string | null>;
+  /** A new or existing .csv file. */
+  chooseCsv(start?: string): Promise<string | null>;
 }
 
 export const ApiContext = createContext<Api | null>(null);

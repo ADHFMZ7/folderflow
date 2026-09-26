@@ -4,6 +4,7 @@
 
 pub mod catalog;
 pub mod commands;
+pub mod pickers;
 pub mod providers;
 mod summary;
 pub mod types;

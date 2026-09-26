@@ -16,6 +16,7 @@ use storage::secrets::KeychainStore;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = DataDir::open(app.path().app_data_dir()?)?;
             // Keys go in the Keychain under the bundle id, com.adhfmz7.folderflow.
@@ -43,6 +44,8 @@ pub fn run() {
             commands::apply_draft,
             commands::discard_draft,
             commands::list_templates,
+            commands::choose_folder,
+            commands::choose_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -79,7 +79,7 @@ pub enum StepKind {
         next: Next,
     },
     Classify {
-        categories: Vec<Branch>,
+        categories: Vec<Category>,
         #[serde(default)]
         instructions: String,
         #[serde(default)]
@@ -118,6 +118,10 @@ pub enum StepKind {
     CreateFile {
         name: String,
         contents: String,
+        /// Where the new file goes; missing or empty means the file's folder.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        folder: Option<String>,
         #[serde(default)]
         next: Next,
     },
@@ -129,6 +133,10 @@ pub enum StepKind {
     AddRow {
         file: String,
         columns: Vec<String>,
+        /// One heading per column, written as the first row of a new file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        headers: Option<Vec<String>>,
         #[serde(default)]
         next: Next,
     },
@@ -152,8 +160,21 @@ pub enum StepKind {
     },
 }
 
-/// A `classify` category or an `askMe` answer. The id never changes; the label
-/// is only display text.
+/// A `classify` category: a branch, plus a description of what belongs in it
+/// that is sent to the model with the label.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Category {
+    pub id: String,
+    pub label: String,
+    /// "How to recognise it". Guidance for the model, never filled in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub description: Option<String>,
+}
+
+/// An `askMe` answer (and the shape of every branch). The id never changes;
+/// the label is only display text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Branch {
@@ -189,6 +210,10 @@ pub struct Field {
     pub name: String,
     #[serde(rename = "type")]
     pub kind: FieldType,
+    /// "What to look for". Guidance for the model, never filled in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -255,6 +280,11 @@ pub struct Problem {
     pub step_id: Option<String>,
     pub code: ProblemCode,
     pub message: String,
+    /// The field the problem is about, as a path into the step's JSON, such as
+    /// `"folder"` or `"categories.1.label"`. Missing for step-wide problems.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub field: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]

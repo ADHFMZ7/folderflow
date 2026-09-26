@@ -89,8 +89,14 @@ pub fn templates() -> Vec<Template> {
         template(
             "cleanup",
             "Weekly clean-up",
-            "Every Friday, archive Downloads files older than 30 days",
+            "Every Friday at 17:00, a reminder to tidy Downloads",
             "Schedule",
+        ),
+        template(
+            "paperwork",
+            "Paperwork inbox",
+            "Sort receipts, invoices and contracts from Downloads: rename, file and log them, and ask before big invoices",
+            "File added",
         ),
     ]
 }

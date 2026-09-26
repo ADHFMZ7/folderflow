@@ -96,8 +96,12 @@ export type Position = { x: number; y: number };
 /** A branch of a classify or askMe step. The id never changes; the label is display text. */
 export type Branch = { id: string; label: string };
 
+/** A classify category: a branch, plus "how to recognise it" for the model. */
+export type Category = Branch & { description?: string };
+
 export type FieldType = "text" | "number" | "date" | "yesNo";
-export type Field = { name: string; type: FieldType };
+/** A detail an extract or agent step produces. `description` is "what to look for". */
+export type Field = { name: string; type: FieldType; description?: string };
 
 export type Schedule = { every: "day" | "weekday" | "week"; time: string; weekday?: number };
 
@@ -114,15 +118,17 @@ export type Step = StepBase & (
   | ({ type: "fileAdded"; folder: string; fileTypes: string[]; subfolders: boolean } & Next)
   | ({ type: "schedule"; schedule: Schedule } & Next)
   | ({ type: "runNow" } & Next)
-  | ({ type: "classify"; categories: Branch[]; instructions: string } & Branches)
+  | ({ type: "classify"; categories: Category[]; instructions: string } & Branches)
   | ({ type: "extract"; fields: Field[]; ifMissing: "review" | "fail" } & Next)
   | ({ type: "write"; instruction: string; saveAs: string } & Next)
   | ({ type: "agent"; instruction: string; abilities: string[]; outputs: Field[] } & Next)
   | ({ type: "rename"; template: string } & Next)
   | ({ type: "move"; to: string; mode: "move" | "copy" } & Next)
-  | ({ type: "createFile"; name: string; contents: string } & Next)
+  /** `folder`: where the new file goes; missing or empty means the file's folder. */
+  | ({ type: "createFile"; name: string; contents: string; folder?: string } & Next)
   | ({ type: "tag"; tags: string[] } & Next)
-  | ({ type: "addRow"; file: string; columns: string[] } & Next)
+  /** `headers`: one heading per column, the first row of a new file. */
+  | ({ type: "addRow"; file: string; columns: string[]; headers?: string[] } & Next)
   | ({ type: "notify"; message: string } & Next)
   | ({ type: "if"; condition: Condition } & Branches)
   | { type: "stop" }
@@ -147,7 +153,8 @@ export type ProblemCode =
   | "unreachable" | "required" | "unknown_variable" | "no_model" | "invalid_value";
 
 /** Something that stops a workflow from being turned on. stepId is null for the whole workflow. */
-export type Problem = { stepId: string | null; code: ProblemCode; message: string };
+/** `field` is the path of the field it's about in the step's JSON, e.g. "folder" or "categories.1.label". */
+export type Problem = { stepId: string | null; code: ProblemCode; message: string; field?: string };
 
 export type SaveResult = { workflow: Workflow; problems: Problem[] };
 
