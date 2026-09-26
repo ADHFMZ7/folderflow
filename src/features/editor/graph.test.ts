@@ -162,6 +162,12 @@ describe("updateStep", () => {
 });
 
 describe("moveStep", () => {
+  it("changes nothing when the step is already there", () => {
+    const w = sample();
+    expect(moveStep(w, "r", { x: 0, y: 320 })).toBe(w);
+    expect(moveStep(w, "r", { x: 0.3, y: 319.8 })).toBe(w);
+  });
+
   it("changes only the position", () => {
     expect(step(moveStep(sample(), "r", { x: 9, y: 9 }), "r")).toEqual({ ...rename, position: { x: 9, y: 9 } });
   });

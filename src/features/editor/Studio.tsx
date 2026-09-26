@@ -2,7 +2,7 @@
 // middle, inspector on the right. The draft workflow is the only source of truth;
 // every canvas event becomes one of the edits in graph.ts.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow,
   type Connection, type EdgeChange, type NodeChange,
@@ -10,10 +10,10 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { StepType, Workflow } from "../../api/types";
 import { hrefFor } from "../../app/routes";
-import { Button, Spinner, TextInput, Toggle } from "../../ui";
+import { Button, Dialog, Spinner, TextInput, Toggle } from "../../ui";
 import { addStep, connect, disconnect, isTrigger, moveStep, removeSteps, toFlow, updateStep } from "./graph";
 import { Inspector } from "./Inspector";
-import { DRAG_TYPE, Palette } from "./Palette";
+import { Palette } from "./Palette";
 import { StepNode } from "./StepNode";
 import { useEditor } from "./useEditor";
 import styles from "./Studio.module.css";
@@ -47,8 +47,9 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
   // React Flow measures each card; it needs those sizes back to show them.
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
 
-  useUnsavedGuard(dirty);
+  const leaving = useUnsavedGuard(dirty);
   useSaveShortcut(save);
+  const canvasRef = useRef<HTMLElement>(null);
 
   const flow = useMemo(() => toFlow(draft, problems), [draft, problems]);
   const nodes = flow.nodes.map((n) => ({ ...n, measured: measured[n.id], selected: n.id === selected }));
@@ -103,11 +104,12 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
     add(type, { x: selectedStep?.position.x ?? draft.steps[0]?.position.x ?? 0, y: lowest + 160 });
   };
 
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    const type = e.dataTransfer.getData(DRAG_TYPE) as StepType;
-    if (type) add(type, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-  };
+  /** A palette drag that ends on the canvas adds the step where it was dropped. */
+  const onDrop = useCallback((type: StepType, point: { x: number; y: number }) => {
+    const r = canvasRef.current?.getBoundingClientRect();
+    if (!r || point.x < r.left || point.x > r.right || point.y < r.top || point.y > r.bottom) return;
+    add(type, rf.screenToFlowPosition(point));
+  }, [add, rf]);
 
   const stepTitle = (stepId: string) => draft.steps.find((s) => s.id === stepId)?.title ?? null;
 
@@ -139,8 +141,8 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
       )}
 
       <div className={styles.body}>
-        <Palette onAdd={addBelow} />
-        <section className={styles.canvas} aria-label="Canvas" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+        <Palette onAdd={addBelow} onDrop={onDrop} />
+        <section ref={canvasRef} className={styles.canvas} aria-label="Canvas">
           <ReactFlow
             nodes={nodes} edges={edges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
@@ -162,21 +164,39 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
           onDelete={(stepId) => { edit((w) => removeSteps(w, [stepId])); setSelected(null); }}
           onSelect={(stepId) => { setSelected(stepId); rf.fitView({ nodes: [{ id: stepId }], duration: 300, maxZoom: 1 }); }} />
       </div>
+
+      {leaving.to && (
+        <Dialog title="Leave without saving?" onClose={leaving.stay}
+          actions={<>
+            <Button variant="secondary" onClick={leaving.stay}>Keep editing</Button>
+            <Button variant="danger" onClick={leaving.go}>Leave without saving</Button>
+            <Button onClick={async () => { if (await save()) leaving.go(); else leaving.stay(); }}>Save and leave</Button>
+          </>}>
+          <p>Your changes to “{draft.name}” haven't been saved.</p>
+        </Dialog>
+      )}
     </div>
   );
 }
 
-/** Asks before leaving the editor through an in-app link, or closing the window, with unsaved changes. */
+/**
+ * Holds in-app navigation while there are unsaved changes, so the editor can ask
+ * first. Asking happens in the app: native confirm dialogs don't show in Tauri's
+ * macOS window, where they silently answer "no".
+ */
 function useUnsavedGuard(dirty: boolean) {
+  const [to, setTo] = useState<string | null>(null);
+
   useEffect(() => {
     if (!dirty) return;
     const onClick = (e: MouseEvent) => {
       const link = (e.target as Element | null)?.closest?.("a[href^='#/']");
-      if (link && !window.confirm("Leave without saving? Your changes to this workflow will be lost.")) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      if (!link) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setTo(link.getAttribute("href"));
     };
+    // Closing the window in a browser; Tauri's window doesn't ask.
     const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
     document.addEventListener("click", onClick, true);
     window.addEventListener("beforeunload", onUnload);
@@ -185,10 +205,17 @@ function useUnsavedGuard(dirty: boolean) {
       window.removeEventListener("beforeunload", onUnload);
     };
   }, [dirty]);
+
+  const stay = useCallback(() => setTo(null), []);
+  const go = useCallback(() => {
+    if (to) window.location.hash = to;
+    setTo(null);
+  }, [to]);
+  return { to, stay, go };
 }
 
 /** Cmd-S (Ctrl-S elsewhere) saves. */
-function useSaveShortcut(save: () => void) {
+function useSaveShortcut(save: () => unknown) {
   const latest = useRef(save);
   latest.current = save;
   useEffect(() => {

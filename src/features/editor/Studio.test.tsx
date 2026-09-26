@@ -18,6 +18,11 @@ const canvas = () => screen.getByRole("region", { name: "Canvas" });
 /** Selects a step card. A plain click: jsdom's mouse-down has no window, which React Flow's drag code needs. */
 const selectStep = (title: string) => fireEvent.click(within(canvas()).getByText(title));
 
+/** jsdom has no layout: place the canvas at x 200-1200, y 0-800. */
+const stubCanvasRect = () => {
+  canvas().getBoundingClientRect = () => ({ left: 200, top: 0, right: 1200, bottom: 800, width: 1000, height: 800, x: 200, y: 0, toJSON: () => ({}) });
+};
+
 describe("studio", () => {
   it("shows the workflow's steps on the canvas", async () => {
     await openWorkflow();
@@ -96,17 +101,70 @@ describe("studio", () => {
     expect(await screen.findByDisplayValue("Changed elsewhere")).toBeInTheDocument();
   });
 
-  it("asks before leaving with unsaved changes", async () => {
-    const { user } = await openWorkflow();
+  it("asks in the app, not a native dialog, before leaving with unsaved changes", async () => {
+    const { user, api, wf } = await openWorkflow();
+    const confirm = vi.spyOn(window, "confirm");
     await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     await user.click(screen.getByRole("link", { name: "All workflows" }));
-    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole("textbox", { name: "Workflow name" })).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "Leave without saving?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Workflow name" })).toHaveValue("Tidy screenshots!");
 
     await user.click(screen.getByRole("link", { name: "All workflows" }));
+    await user.click(await screen.findByRole("button", { name: "Leave without saving" }));
     expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
+    expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("can save and leave in one go", async () => {
+    const { user, api, wf } = await openWorkflow();
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+
+    await user.click(screen.getByRole("link", { name: "Workflows" }));
+    await user.click(await screen.findByRole("button", { name: "Save and leave" }));
+
+    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
+    expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots!");
+  });
+
+  it("leaves without asking when nothing changed", async () => {
+    const { user } = await openWorkflow();
+    selectStep("Move to Screenshots");
+
+    await user.click(screen.getByRole("link", { name: "All workflows" }));
+
+    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
+  });
+
+  it("drags a step from the palette onto the canvas with the pointer", async () => {
+    await openWorkflow();
+    stubCanvasRect();
+    const item = screen.getByRole("button", { name: "Add Notify" });
+
+    fireEvent.pointerDown(item, { clientX: 20, clientY: 400, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 300 });
+    expect(screen.getByTestId("drag-ghost")).toHaveTextContent("Notify");
+    fireEvent.pointerUp(window, { clientX: 500, clientY: 300 });
+
+    expect(await within(canvas()).findByText("Notify me")).toBeInTheDocument();
+    expect(screen.queryByTestId("drag-ghost")).not.toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("adds nothing when a palette drag ends outside the canvas", async () => {
+    await openWorkflow();
+    stubCanvasRect();
+    const item = screen.getByRole("button", { name: "Add Notify" });
+
+    fireEvent.pointerDown(item, { clientX: 20, clientY: 400, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 60, clientY: 420 });
+    fireEvent.pointerUp(window, { clientX: 60, clientY: 420 });
+
+    expect(within(canvas()).queryByText("Notify me")).not.toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
   });
 
   it("says why trying and turning on aren't available yet", async () => {
