@@ -19,8 +19,14 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `listTemplates()` | `list_templates` | none | `Template[]` |
 | `chooseFolder(start?)` | `choose_folder` | `start: string \| null` | `string \| null` |
 | `chooseCsv(start?)` | `choose_csv` | `start: string \| null` | `string \| null` |
+| `chooseFiles(start?)` | `choose_files` | `start: string \| null` | `string[]` |
+| `runNow(workflowId, files)` | `run_now` | `workflowId`, `files: string[]` | `RunSummary[]` |
+| `listRuns(query?)` | `list_runs` | `query: RunQuery` | `RunSummary[]` |
+| `getRun(id)` | `get_run` | `id` | `Run` |
 
 Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_workflow`, `delete_workflow`, `validate_workflow`) and the workflow file format are in `docs/workflow-format.md`.
+
+Runs, the `run-changed` event (`onRunChanged` in the Api) and what each run command checks are in `docs/engine.md`, "Runs", "Run now" and "Api additions".
 
 ## Rules
 
@@ -35,12 +41,12 @@ Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_wo
   | Code | Meaning |
   | --- | --- |
   | `too_new` | The settings file comes from a newer FolderFlow and was left untouched |
-  | `not_found` | Unknown provider or connection |
+  | `not_found` | Unknown provider, connection, workflow or run |
   | `invalid` | The request breaks a rule, such as a default pointing at a missing connection, or `detect` on a provider that isn't connected by detection |
   | `keychain` | The Keychain refused a request |
   | `provider` | A provider answered in a way that isn't an expected refusal |
   | `io` | Reading or writing a file failed |
   | `conflict` | A save was based on an older revision than the one on disk |
 
-- **Pickers open from Rust.** `choose_folder` and `choose_csv` show the native macOS panel in front of the window (`tauri-plugin-dialog`, used from Rust, so the window needs no dialog permission). They start in `start` when it names an existing folder, or the folder of an existing file, and answer with the chosen path, the home folder written as `~`, or `null` when cancelled. `choose_csv` picks an existing .csv; a new file's path is typed. The mock answers with `MockOptions.chosenFolder` / `chosenCsv` (null is a cancel), or a sample path in previews.
+- **Pickers open from Rust.** `choose_folder` and `choose_csv` show the native macOS panel in front of the window (`tauri-plugin-dialog`, used from Rust, so the window needs no dialog permission). They start in `start` when it names an existing folder, or the folder of an existing file, and answer with the chosen path, the home folder written as `~`, or `null` when cancelled. `choose_csv` picks an existing .csv; a new file's path is typed. `choose_files` picks one or more files to run a workflow on, and answers with none when cancelled. The mock answers with `MockOptions.chosenFolder` / `chosenCsv` (null is a cancel) / `chosenFiles` (empty is a cancel), or a sample path in previews.
 - **Load notices.** `getSettings` returns `notice: { kind: "recovered", backup }` when the settings file was unreadable and was moved aside, and keeps returning it for the rest of the session, so a second call (React Strict Mode, a remount) can't lose it. Dismissing it only hides it in the UI. A file from a newer version fails with `too_new`, and the UI blocks until the user opens a newer FolderFlow.

@@ -42,6 +42,11 @@ describe("tauri api", () => {
     ["chooseFolder", ["~/Documents"], "choose_folder", { start: "~/Documents" }],
     ["chooseFolder", [], "choose_folder", { start: null }],
     ["chooseCsv", [], "choose_csv", { start: null }],
+    ["chooseFiles", [], "choose_files", { start: null }],
+    ["runNow", ["w1", ["~/a.pdf"]], "run_now", { workflowId: "w1", files: ["~/a.pdf"] }],
+    ["listRuns", [], "list_runs", { query: {} }],
+    ["listRuns", [{ workflowId: "w1", limit: 5 }], "list_runs", { query: { workflowId: "w1", limit: 5 } }],
+    ["getRun", ["r1"], "get_run", { id: "r1" }],
   ] as const)("%s invokes %s", async (method, args, cmd, expected) => {
     const calls = recordCalls();
     const api = createTauriApi() as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
@@ -51,6 +56,20 @@ describe("tauri api", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].cmd).toBe(cmd);
     expect(calls[0].args ?? {}).toEqual(expected);
+  });
+
+  it("hears run-changed events until told to stop", async () => {
+    mockIPC(() => null, { shouldMockEvents: true });
+    const heard: unknown[] = [];
+    const stop = createTauriApi().onRunChanged((change) => heard.push(change));
+    await new Promise((r) => setTimeout(r, 0));
+    const { emit } = await import("@tauri-apps/api/event");
+
+    await emit("run-changed", { runId: "r1", workflowId: "w1", status: "done" });
+    stop();
+    await emit("run-changed", { runId: "r2", workflowId: "w1", status: "done" });
+
+    expect(heard).toEqual([{ runId: "r1", workflowId: "w1", status: "done" }]);
   });
 
   it("returns what the command returns", async () => {

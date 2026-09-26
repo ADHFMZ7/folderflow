@@ -16,6 +16,7 @@ import { Button, Dialog, Spinner, TextInput, Toggle } from "../../ui";
 import { addStep, connect, disconnect, isTrigger, moveStep, removeSteps, toFlow, updateStep } from "./graph";
 import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
+import { RunNow } from "./RunNow";
 import { StepNode } from "./StepNode";
 import { useEditor, type SaveStatus } from "./useEditor";
 import styles from "./Studio.module.css";
@@ -157,6 +158,7 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
           </button>
         )}
         <span className={styles.spacer} />
+        <RunNow workflow={draft} problems={problems.length} flush={flush} />
         <Button variant="secondary" disabled title="Trying a workflow on a file comes with the engine that runs workflows.">Try on a file</Button>
         <span title="Turning workflows on comes with the engine that runs them.">
           <Toggle label="On" checked={draft.enabled} onChange={() => {}} disabled />

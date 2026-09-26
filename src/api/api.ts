@@ -4,8 +4,8 @@
 
 import { createContext, useContext } from "react";
 import type {
-  ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, SaveResult,
-  Settings, SettingsChange, Template, Workflow, WorkflowSummary,
+  ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, Run, RunChanged,
+  RunQuery, RunSummary, SaveResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
 } from "./types";
 
 /** Every method may reject with an ApiError. */
@@ -50,6 +50,17 @@ export interface Api {
   chooseFolder(start?: string): Promise<string | null>;
   /** An existing .csv file. A new file's path is typed instead. */
   chooseCsv(start?: string): Promise<string | null>;
+  /** Files to run a workflow on; empty if cancelled. */
+  chooseFiles(start?: string): Promise<string[]>;
+
+  // Runs: see docs/engine.md.
+  /** Queues one run of the saved workflow per file and returns them queued. All files are checked first. */
+  runNow(workflowId: string, files: string[]): Promise<RunSummary[]>;
+  /** Newest first. */
+  listRuns(query?: RunQuery): Promise<RunSummary[]>;
+  getRun(id: string): Promise<Run>;
+  /** Calls `listener` on every run-changed event until the returned function is called. */
+  onRunChanged(listener: (change: RunChanged) => void): () => void;
 }
 
 export const ApiContext = createContext<Api | null>(null);

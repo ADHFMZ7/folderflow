@@ -8,27 +8,25 @@ new file.
 
 ```
 src/          React + TypeScript UI, rendered by the system WebKit
-src-tauri/    Rust core: window, menu bar, file access, talks to the engine
-engine/       Python engine: watches folders, queues jobs, runs the agents
+src-tauri/    Rust core: window, menu bar, settings and workflows, and the
+              engine that runs workflows (src-tauri/src/engine)
+docs/         The api contract, the workflow format, step settings, and the engine
 ```
 
-The UI only talks to the Rust core (through `invoke()`), and the Rust core
-runs the engine as a sidecar process. The engine can later move into Rust
-without the UI changing.
+The UI only talks to the Rust core, through the `Api` interface in
+`src/api/api.ts`; `docs/api-contract.md` lists the commands. How workflows run
+is in `docs/engine.md`.
 
 ## Development
 
-Requirements: Node 20+, uv, Xcode command line tools, and rustup. The Rust
+Requirements: Node 20+, Xcode command line tools, and rustup. The Rust
 version is pinned in `rust-toolchain.toml`; rustup installs it on first build.
 
 ```sh
 npm install
 npm run tauri dev        # run the app with hot reload
+npm test                 # the UI tests
+cd src-tauri && cargo test   # the core's tests
 ```
 
-The engine on its own:
-
-```sh
-cd engine
-uv run folderflow-engine
-```
+Read `TESTING.md` before writing tests.

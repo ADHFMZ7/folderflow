@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render";
+import type { Step } from "../../api/types";
 import { fileTrigger, openWith } from "./steps/testing";
 
 afterEach(() => vi.restoreAllMocks());
@@ -305,6 +306,50 @@ describe("studio", () => {
     await openWorkflow();
     expect(screen.getByRole("button", { name: "Try on a file" })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "On" })).toBeDisabled();
+  });
+});
+
+describe("run now", () => {
+  const runNow = (next: string | null): Step => ({ id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next });
+  const notify: Step = { id: "n", type: "notify", title: "Say hello", position: { x: 0, y: 160 }, message: "Hello {file}", next: null };
+  const run = () => fireEvent.click(screen.getByRole("button", { name: "Run…" }));
+
+  it("runs the saved workflow on the chosen file and says how it went", async () => {
+    const { api, wf } = await openWith([runNow("n"), notify], "Say hello", { chosenFiles: ["~/Downloads/Scan_0042.pdf"] });
+
+    run();
+
+    expect(await screen.findByText("Ran on Scan_0042.pdf")).toBeInTheDocument();
+    const [done] = await api.listRuns({ workflowId: wf.id });
+    expect(done).toMatchObject({ status: "done", file: "Scan_0042.pdf" });
+  });
+
+  it("counts the files, and says why a run failed", async () => {
+    const rename: Step = { id: "r", type: "rename", title: "Rename it", position: { x: 0, y: 160 }, template: "{file} done", next: null };
+    await openWith([fileTrigger("r"), rename], "Rename it", { chosenFiles: ["~/Downloads/a.pdf", "~/Downloads/b.pdf"] });
+
+    run();
+
+    expect(await screen.findByText("Ran on 2 files, 2 failed: Rename steps can't run in this version of FolderFlow yet.")).toBeInTheDocument();
+  });
+
+  it("runs nothing when the picker is cancelled", async () => {
+    const { api, wf } = await openWith([runNow("n"), notify], "Say hello", { chosenFiles: [] });
+
+    run();
+
+    await waitFor(async () => expect(await api.listRuns({ workflowId: wf.id })).toEqual([]));
+    expect(screen.queryByText(/^Ran on|^Running on/)).not.toBeInTheDocument();
+  });
+
+  it("waits for the problems to be fixed", async () => {
+    await openWith([runNow("n"), { ...notify, message: "" }], "Say hello");
+    expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
+  });
+
+  it("isn't offered for a workflow that runs on a schedule", async () => {
+    await openWorkflow("cleanup");
+    expect(screen.queryByRole("button", { name: "Run…" })).not.toBeInTheDocument();
   });
 });
 
