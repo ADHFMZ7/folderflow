@@ -123,6 +123,22 @@ export function createMockApi(options: MockOptions = {}): Api {
   };
   const put = (wf: Workflow) => writeWorkflows({ ...readWorkflows(), [wf.id]: wf });
 
+  // Drafts, keyed by workflow id, following the same rules as the Rust core.
+  const DRAFTS_KEY = "folderflow.drafts";
+  const readDrafts = (): Record<string, Workflow> => JSON.parse(storage.getItem(DRAFTS_KEY) ?? "{}");
+  const writeDrafts = (all: Record<string, Workflow>) => storage.setItem(DRAFTS_KEY, JSON.stringify(all));
+  const dropDraft = (id: string) => {
+    const { [id]: _dropped, ...rest } = readDrafts();
+    writeDrafts(rest);
+  };
+  /** The draft, if it still belongs to the running revision; a stale one is dropped. */
+  const draftOf = (live: Workflow): Workflow | null => {
+    const draft = readDrafts()[live.id];
+    if (!draft) return null;
+    if (draft.revision !== live.revision) { dropDraft(live.id); return null; }
+    return draft;
+  };
+
   function read(): Settings {
     if (options.storedFile === "tooNew") {
       throw new ApiError("too_new", "the settings file is from a newer version of FolderFlow (format 2)");
@@ -222,7 +238,9 @@ export function createMockApi(options: MockOptions = {}): Api {
     },
 
     async listWorkflows() {
-      const saved = Object.values(readWorkflows()).map((wf) => summarize(wf, runs.get(wf.id)));
+      const saved = Object.values(readWorkflows())
+        .map((wf) => ({ ...summarize(wf, runs.get(wf.id)), hasDraft: !!draftOf(wf) }))
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id));
       return [...saved, ...(options.damagedWorkflows ?? []).map(damagedSummary)];
     },
     async listTemplates() { return TEMPLATES; },
@@ -254,6 +272,36 @@ export function createMockApi(options: MockOptions = {}): Api {
       stored(id);
       const { [id]: _removed, ...rest } = readWorkflows();
       writeWorkflows(rest);
+      dropDraft(id);
+    },
+
+    async getDraft(id) { return draftOf(stored(id)); },
+
+    async saveDraft(workflow) {
+      const live = stored(workflow.id);
+      if (workflow.revision !== live.revision) {
+        throw new ApiError("conflict", "This workflow was changed somewhere else since you opened it.");
+      }
+      const draft = { ...workflow, revision: live.revision, enabled: live.enabled };
+      writeDrafts({ ...readDrafts(), [draft.id]: draft });
+      return { workflow: draft, problems: roughValidate(draft) };
+    },
+
+    async applyDraft(id) {
+      const live = stored(id);
+      const draft = draftOf(live);
+      if (!draft) throw new ApiError("not_found", "There are no changes waiting to be applied.");
+      const problems = roughValidate(draft);
+      if (live.enabled && problems.length) throw new ApiError("invalid", "Fix the problems before applying these changes.");
+      const applied = { ...draft, revision: live.revision + 1, enabled: live.enabled };
+      put(applied);
+      dropDraft(id);
+      return { workflow: applied, problems };
+    },
+
+    async discardDraft(id) {
+      stored(id);
+      dropDraft(id);
     },
 
     async validateWorkflow(workflow) { return roughValidate(workflow); },
