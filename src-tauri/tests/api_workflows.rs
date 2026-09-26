@@ -89,6 +89,7 @@ fn create_with_no_template_saves_a_blank_workflow() {
             needs_you: 0,
             kinds_needed: vec![],
             status: WorkflowStatus::Ok,
+            has_draft: false,
         }
     );
 }
@@ -242,6 +243,7 @@ fn damaged_and_newer_files_are_listed_by_file_name_and_left_alone() {
         needs_you: 0,
         kinds_needed: vec![],
         status,
+        has_draft: false,
     };
     assert!(list.contains(&empty(
         damaged_id,

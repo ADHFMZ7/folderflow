@@ -38,6 +38,10 @@ pub fn run() {
             commands::save_workflow,
             commands::delete_workflow,
             commands::validate_workflow,
+            commands::get_draft,
+            commands::save_draft,
+            commands::apply_draft,
+            commands::discard_draft,
             commands::list_templates,
         ])
         .run(tauri::generate_context!())

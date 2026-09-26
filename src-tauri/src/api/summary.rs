@@ -7,6 +7,7 @@ use super::catalog;
 use super::types::{WorkflowStatus, WorkflowSummary};
 
 pub fn of(listed: Listed) -> WorkflowSummary {
+    let has_draft = listed.has_draft;
     let (workflow, status) = match listed.entry {
         Entry::Ok(workflow) => (workflow, WorkflowStatus::Ok),
         Entry::Damaged => return unreadable(listed.id, listed.file_name, WorkflowStatus::Damaged),
@@ -21,6 +22,7 @@ pub fn of(listed: Listed) -> WorkflowSummary {
         last_run: None,
         needs_you: 0,
         status,
+        has_draft,
     }
 }
 
@@ -35,6 +37,7 @@ fn unreadable(id: String, file_name: String, status: WorkflowStatus) -> Workflow
         needs_you: 0,
         kinds_needed: Vec::new(),
         status,
+        has_draft: false,
     }
 }
 

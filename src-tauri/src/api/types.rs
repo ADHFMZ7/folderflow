@@ -206,6 +206,8 @@ pub struct WorkflowSummary {
     pub needs_you: u32,
     pub kinds_needed: Vec<String>,
     pub status: WorkflowStatus,
+    /// Whether there are changes waiting in a draft, not live yet.
+    pub has_draft: bool,
 }
 
 /// Whether a workflow's file could be read. For `damaged` and `tooNew`, the

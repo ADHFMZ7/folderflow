@@ -85,6 +85,8 @@ export type WorkflowSummary = {
   kindsNeeded: ModelKindId[];
   /** "damaged": the file can't be read and is kept as is. "tooNew": written by a newer FolderFlow. */
   status: "ok" | "damaged" | "tooNew";
+  /** Whether there are changes waiting in a draft, not live yet. See "Drafts" in docs/workflow-format.md. */
+  hasDraft: boolean;
 };
 
 // ---- Workflows: see docs/workflow-format.md -------------------------------
