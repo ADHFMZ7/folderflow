@@ -61,8 +61,11 @@ export function useEditor(id: string) {
     });
   }, []);
 
-  const save = useCallback(async () => {
-    if (state.status !== "ready" || !state.dirty || state.saving) return;
+  /** Saves the draft. Resolves to whether everything is now saved. */
+  const save = useCallback(async (): Promise<boolean> => {
+    if (state.status !== "ready") return false;
+    if (!state.dirty) return true;
+    if (state.saving) return false;
     const sent = state.draft;
     setState({ ...state, saving: true, saveError: null });
     try {
@@ -72,10 +75,12 @@ export function useEditor(id: string) {
       setState((cur) => cur.status !== "ready" ? cur
         : cur.draft === sent ? { ...cur, draft: workflow, problems, dirty: false, saving: false }
         : { ...cur, draft: { ...cur.draft, revision: workflow.revision }, saving: false });
+      return true;
     } catch (e) {
       const conflict = e instanceof ApiError && e.code === "conflict";
       const message = e instanceof Error ? e.message : String(e);
       setState((cur) => (cur.status === "ready" ? { ...cur, saving: false, saveError: { conflict, message } } : cur));
+      return false;
     }
   }, [api, state]);
 

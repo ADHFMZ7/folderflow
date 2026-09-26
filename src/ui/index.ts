@@ -2,6 +2,7 @@ export { Badge } from "./Badge";
 export { Banner } from "./Banner";
 export { Button } from "./Button";
 export { Card } from "./Card";
+export { Dialog } from "./Dialog";
 export { ExternalLink } from "./ExternalLink";
 export { Field } from "./Field";
 export { ProgressDots } from "./ProgressDots";

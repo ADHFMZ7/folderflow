@@ -95,9 +95,13 @@ export function removeSteps(workflow: Workflow, ids: string[]): Workflow {
   return { ...workflow, steps };
 }
 
+/** Moves a step. A move to where it already is changes nothing, so a click never marks the workflow unsaved. */
 export function moveStep(workflow: Workflow, id: string, position: XYPosition): Workflow {
   // Whole pixels keep workflow files tidy; dragging gives fractions.
-  return replaceStep(workflow, id, (s) => ({ ...s, position: { x: Math.round(position.x), y: Math.round(position.y) } }));
+  const to = { x: Math.round(position.x), y: Math.round(position.y) };
+  const step = workflow.steps.find((s) => s.id === id);
+  if (!step || (step.position.x === to.x && step.position.y === to.y)) return workflow;
+  return replaceStep(workflow, id, (s) => ({ ...s, position: to }));
 }
 
 /**

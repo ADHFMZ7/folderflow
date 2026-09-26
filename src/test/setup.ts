@@ -32,3 +32,14 @@ Object.defineProperties(HTMLElement.prototype, {
   offsetWidth: { get() { return parseFloat(this.style.width) || 1; } },
 });
 (SVGElement.prototype as unknown as { getBBox: () => DOMRect }).getBBox = () => ({ x: 0, y: 0, width: 0, height: 0 }) as DOMRect;
+
+// jsdom has no PointerEvent; a MouseEvent carries the coordinates the tests need.
+if (!("PointerEvent" in globalThis)) {
+  (globalThis as Record<string, unknown>).PointerEvent = class PointerEvent extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 1;
+    }
+  };
+}
