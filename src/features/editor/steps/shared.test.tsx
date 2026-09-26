@@ -68,6 +68,14 @@ describe("details in text fields", () => {
     await user.click(screen.getByRole("button", { name: "Insert a detail into New name" }));
     expect(screen.getByText("Connect this step to use details from earlier steps.")).toBeInTheDocument();
   });
+
+  it("asks to connect a step no path reaches, rather than blaming earlier steps", async () => {
+    const { user } = await openWith([fileTrigger(null), rename("")], "Rename the file");
+    const name = screen.getByRole("textbox", { name: "New name" });
+    await user.type(name, "{{year}");
+    expect(name).toHaveAccessibleDescription(expect.stringContaining("Connect this step to the workflow to use {year}."));
+    expect(name).not.toHaveAccessibleDescription(expect.stringContaining("Nothing before this step"));
+  });
 });
 
 describe("problems", () => {

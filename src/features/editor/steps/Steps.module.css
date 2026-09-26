@@ -17,8 +17,8 @@
 }
 
 .insert {
-  padding: 0 var(--space-1); border: 0; background: transparent; color: var(--accent);
-  font-size: var(--fs-xs); font-weight: 600; cursor: pointer; border-radius: var(--radius-sm);
+  flex: none; padding: 0 var(--space-1); border: 0; background: transparent; color: var(--accent);
+  font-size: var(--fs-xs); font-weight: 600; cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap;
 }
 .insert:hover { background: var(--accent-soft); }
 
@@ -76,3 +76,4 @@
   border-left: 3px solid var(--kind-ai); background: var(--panel-2); border-radius: var(--radius-sm);
 }
 .kindLine { margin: 0; display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: var(--tracking-label); }
+.kindLine > span { text-transform: none; letter-spacing: 0; }

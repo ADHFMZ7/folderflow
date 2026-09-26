@@ -95,7 +95,9 @@ export function VariableText({ label, value, onChange, field, multiline, hint, p
   const [menu, setMenu] = useState<Menu | null>(null);
   const [active, setActive] = useState(0);
 
-  const unknown = unknownIn(value, available).map((n) => `Nothing before this step gives {${n}}.`);
+  const unknown = unknownIn(value, available).map((n) => reachable
+    ? `Nothing before this step gives {${n}}.`
+    : `Connect this step to the workflow to use {${n}}.`);
   const problems = [...unknown, ...useFieldProblems(field, { skipUnknown: true })];
   const { describedBy, nodes } = useDescription({ hint, problems, preview });
 

@@ -51,7 +51,7 @@ function CategoryRow({ category, index, set }: { category: Category; index: numb
     <>
       <TextInput aria-label={`Category ${n} name`} placeholder="Name, like Receipt" value={category.label}
         onChange={(e) => set({ ...category, label: e.target.value })} />
-      <TextArea aria-label={`Category ${n}: how to recognise it`} rows={2}
+      <TextArea aria-label={`Category ${n}: how to recognise it`} rows={3}
         placeholder="How to recognise it, like: proof of a payment I made" value={category.description ?? ""}
         onChange={(e) => set(withDescription(category, e.target.value))} />
       <ListProblems messages={problems} />
