@@ -3,8 +3,10 @@ import ReactDOM from "react-dom/client";
 import { createMockApi } from "./api/mock";
 import { createTauriApi, inTauri } from "./api/tauri";
 import { App } from "./app/App";
+import { applyInitialShell, ShellSwitcher } from "./prototype/shell";
 import "./theme/tokens.css";
 import "./theme/base.css";
+import "./prototype/shells.css";
 
 // Inside the app, the Rust core. In a plain browser (npm run dev), the mock,
 // with localStorage switches for trying things out:
@@ -21,8 +23,11 @@ const api = inTauri()
     storedFile: (["damaged", "tooNew"] as const).find((v) => v === localStorage.getItem("folderflow.mock.settingsFile")),
   });
 
+applyInitialShell();
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App api={api} />
+    <ShellSwitcher />
   </React.StrictMode>,
 );

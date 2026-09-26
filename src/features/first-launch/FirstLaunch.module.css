@@ -14,3 +14,8 @@
 .points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .points li { display: flex; flex-direction: column; padding-left: var(--space-3); border-left: 3px solid var(--accent); }
 .points span { color: var(--muted); }
+/* PROTOTYPE */
+:global([data-shell="sheet"]) .card { background: var(--sheet); border-color: var(--hairline); border-radius: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.07); }
+:global([data-shell="sheet"]) .footer { border-top-color: var(--hairline); }
+:global([data-shell="unified"]) .card { background: var(--card); border-color: var(--hairline); }
+:global([data-shell="unified"]) .footer { border-top-color: var(--hairline); }

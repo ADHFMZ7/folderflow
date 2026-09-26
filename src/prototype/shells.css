@@ -1,0 +1,24 @@
+/* PROTOTYPE: throwaway. Surface tokens for each window style. */
+
+/* A · Sheet: chrome and sidebar share one tone; pages sit on a raised sheet. */
+[data-shell="sheet"] {
+  --chrome: #e4e8ee;
+  --sheet: #fbfcfd;
+  --card: #f3f5f8;
+  --hairline: color-mix(in srgb, var(--line) 55%, transparent);
+  --select: color-mix(in srgb, var(--text) 7%, transparent);
+}
+/* B · Unified: one surface everywhere, split by hairlines only. */
+[data-shell="unified"] {
+  --surface: #f7f8fa;
+  --tone: #eef1f5;
+  --card: #fbfcfd;
+  --hairline: #e1e5eb;
+  --select: color-mix(in srgb, var(--text) 7%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  [data-shell="sheet"] { --chrome: #0b0e14; --sheet: #161b24; --card: #1c2230; }
+  [data-shell="unified"] { --surface: #15181e; --tone: #111418; --card: #1a1e25; --hairline: #262b33; }
+}
+[data-shell="sheet"] body { background: var(--chrome); }
+[data-shell="unified"] body { background: var(--surface); }

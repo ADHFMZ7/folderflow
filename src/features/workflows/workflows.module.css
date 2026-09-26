@@ -26,3 +26,7 @@
 .back { color: var(--accent); text-decoration: none; font-weight: 550; }
 .back::before { content: "← "; }
 .steps { margin: var(--space-2) 0 0; padding-left: var(--space-5); }
+/* PROTOTYPE */
+:global([data-shell="sheet"]) .template { background: var(--card); border-color: transparent; }
+:global([data-shell="unified"]) .template { background: var(--card); border-color: var(--hairline); }
+:global([data-shell] ) .template:hover { border-color: var(--accent); }

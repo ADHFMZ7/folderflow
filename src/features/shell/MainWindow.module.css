@@ -1,6 +1,27 @@
 .window { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100%; }
-.collapsed { grid-template-columns: 52px minmax(0, 1fr); }
-.page { overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); }
+.collapsed { grid-template-columns: 72px minmax(0, 1fr); }
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.page { flex: 1; min-height: 0; overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); }
 /* Every page sits in one centred column; pages may narrow it further. */
 .content { width: 100%; max-width: 1040px; margin-inline: auto; }
-.editor { min-width: 0; min-height: 0; overflow: hidden; }
+.editor { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.spacer { flex: 1; }
+
+/* A · Sheet: the page sits on a raised sheet inset from the window chrome. */
+:global([data-shell="sheet"]) .main {
+  margin: 8px 8px 8px 0; background: var(--sheet); border: 1px solid var(--hairline); border-radius: 12px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.05); overflow: hidden;
+}
+:global([data-shell="sheet"]) .page { padding-top: var(--space-6); }
+
+/* B · Unified: a title bar lined up with the traffic lights, and a status bar. */
+:global([data-shell="unified"]) .main { background: var(--surface); }
+.topBar {
+  display: flex; align-items: center; height: 44px; flex-shrink: 0; padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+.crumb { font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
+.statusBar {
+  display: flex; align-items: center; gap: var(--space-3); height: 26px; flex-shrink: 0; padding: 0 var(--space-3);
+  border-top: 1px solid var(--hairline); color: var(--muted); font-size: var(--fs-xs);
+}

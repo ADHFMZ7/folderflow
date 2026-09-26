@@ -29,3 +29,12 @@
 .dotOk, .dotWarn { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--ok); }
 .dotWarn { background: var(--warn); }
 .notice { color: var(--muted); font-size: var(--fs-sm); margin: var(--space-1) 0; }
+.readinessInline { display: flex; align-items: center; gap: var(--space-4); color: inherit; text-decoration: none; }
+.readinessInline .readinessRow { font-size: var(--fs-xs); gap: 6px; }
+.readinessInline .dotOk, .readinessInline .dotWarn { width: 6px; height: 6px; }
+.readinessInline:hover { color: var(--text); }
+/* PROTOTYPE */
+:global([data-shell="sheet"]) .provider, :global([data-shell="sheet"]) .providerOpen, :global([data-shell="sheet"]) .connect { background: var(--card); }
+:global([data-shell="sheet"]) .provider { border-color: transparent; }
+:global([data-shell="unified"]) .provider, :global([data-shell="unified"]) .providerOpen, :global([data-shell="unified"]) .connect { background: var(--card); }
+:global([data-shell="unified"]) .provider { border-color: var(--hairline); }

@@ -1,1 +1,4 @@
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-4); }
+/* PROTOTYPE: cards lean on tone, not borders. */
+:global([data-shell="sheet"]) .card { background: var(--card); border-color: transparent; }
+:global([data-shell="unified"]) .card { background: var(--card); border-color: var(--hairline); }

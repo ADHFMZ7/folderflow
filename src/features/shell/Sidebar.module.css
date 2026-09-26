@@ -1,18 +1,42 @@
-.sidebar, .rail { display: flex; flex-direction: column; gap: var(--space-2); background: var(--panel-2); border-right: 1px solid var(--line); min-width: 0; }
-.sidebar { padding: var(--space-3) var(--space-2) var(--space-4); }
-.rail { align-items: center; padding: var(--space-3) 0; }
+.sidebar, .rail { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; background: var(--panel-2); border-right: 1px solid var(--line); }
+.sidebar { padding: 0 var(--space-2) var(--space-3); }
+.rail { align-items: center; padding: 0 0 var(--space-3); }
+/* Room for the traffic lights (about 70px wide, centred 22px from the top). */
+.top { display: flex; align-items: center; gap: var(--space-2); height: 44px; padding-left: 14px; flex-shrink: 0; }
+.sidebar .top { justify-content: space-between; padding-right: var(--space-1); }
+.rail .top { flex-direction: column; height: auto; padding: 14px 0 var(--space-2); gap: var(--space-3); }
 .spacer { flex: 1; }
 .menu {
-  display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; padding: 0; margin-left: var(--space-1);
+  display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; padding: 0;
   color: var(--muted); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
 }
-.rail .menu { margin-left: 0; }
-.menu:hover { color: var(--text); background: var(--panel); }
-.railBadge { display: flex; }
+.menu:hover { color: var(--text); background: var(--select, var(--panel)); }
 .items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .item, .current {
-  display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3);
-  color: var(--text); text-decoration: none; border-radius: var(--radius-sm);
+  position: relative; display: flex; align-items: center; gap: var(--space-2); padding: 7px var(--space-3);
+  color: var(--text); text-decoration: none; border-radius: var(--radius);
 }
-.item:hover { background: var(--panel); }
-.current { color: var(--accent); font-weight: 650; box-shadow: inset 3px 0 0 var(--accent); border-radius: 0; }
+.label { flex: 1; }
+.icon { flex-shrink: 0; color: var(--muted); }
+.rail .item, .rail .current { width: 38px; height: 34px; justify-content: center; padding: 0; }
+.item:hover { background: var(--select, var(--panel)); }
+.current { color: var(--accent); font-weight: 650; background: var(--accent-soft); }
+.current .icon { color: var(--accent); }
+.dot {
+  position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
+  background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.readiness { border-radius: var(--radius-lg); }
+
+/* A · Sheet: the sidebar is part of the window chrome. */
+:global([data-shell="sheet"]) .sidebar, :global([data-shell="sheet"]) .rail { background: transparent; border-right: 0; }
+:global([data-shell="sheet"]) .current { color: var(--text); background: var(--select); }
+:global([data-shell="sheet"]) .current .icon { color: var(--text); }
+:global([data-shell="sheet"]) .readiness { background: var(--sheet); margin: 0 var(--space-1); }
+
+/* B · Unified: one surface, a hairline on the right. */
+:global([data-shell="unified"]) .sidebar, :global([data-shell="unified"]) .rail { background: var(--surface); border-right: 1px solid var(--hairline); }
+:global([data-shell="unified"]) .current { color: var(--text); background: var(--select); }
+:global([data-shell="unified"]) .current .icon { color: var(--text); }
+/* Model readiness moves to the status bar. */
+:global([data-shell="unified"]) .readiness { display: none; }

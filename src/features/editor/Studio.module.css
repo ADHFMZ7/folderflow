@@ -79,3 +79,18 @@ button.problem { cursor: pointer; }
   background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .draftBar span { flex: 1; }
+
+/* PROTOTYPE: A · Sheet. Panels share the sheet; the canvas is a soft inset. */
+:global([data-shell="sheet"]) .toolbar { background: transparent; border-bottom: 1px solid var(--hairline); }
+:global([data-shell="sheet"]) .palette { background: transparent; border-right: 0; }
+:global([data-shell="sheet"]) .inspector { background: transparent; border-left: 1px solid var(--hairline); }
+:global([data-shell="sheet"]) .canvas { margin: 8px 0 8px; border-radius: 10px; overflow: hidden; border: 1px solid var(--hairline); }
+:global([data-shell="sheet"]) .canvas :global(.react-flow) { --xy-background-color: var(--card); }
+:global([data-shell="sheet"]) .node { border-color: var(--hairline); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
+
+/* PROTOTYPE: B · Unified. One surface; the toolbar is the title bar. */
+:global([data-shell="unified"]) .toolbar { height: 44px; padding-block: 0; background: var(--surface); border-bottom: 1px solid var(--hairline); }
+:global([data-shell="unified"]) .palette { background: var(--surface); border-right: 1px solid var(--hairline); }
+:global([data-shell="unified"]) .inspector { background: var(--surface); border-left: 1px solid var(--hairline); }
+:global([data-shell="unified"]) .canvas :global(.react-flow) { --xy-background-color: var(--tone); }
+:global([data-shell="unified"]) .node { border-color: var(--hairline); }
