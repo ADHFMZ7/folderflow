@@ -3,10 +3,10 @@
   grid-template-columns: 220px minmax(0, 1fr); grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
 }
 .collapsed { grid-template-columns: 56px minmax(0, 1fr); }
-/* Spans the window. The traffic lights come first (about 70px from the left
-   edge), then the sidebar button at a fixed spot. */
-.titleBar { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); padding-left: 14px; }
-.lights { width: var(--traffic-lights-width); height: 12px; flex-shrink: 0; }
+/* Spans the window. The traffic lights come first, then the sidebar button at a
+   fixed spot, both centred in the bar. */
+.titleBar { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); padding-left: var(--traffic-lights-left); }
+.lights { width: var(--traffic-lights-width); height: 14px; flex-shrink: 0; }
 .menu {
   display: grid; place-items: center; width: 30px; height: 28px; flex-shrink: 0; padding: 0;
   color: var(--muted); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
