@@ -133,3 +133,88 @@ describe("removeConnection", () => {
     await expect(api().removeConnection("nope")).rejects.toMatchObject({ code: "not_found" });
   });
 });
+
+describe("workflows", () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  it("creates a blank workflow, saved at revision 1 with one trigger", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+
+    expect(wf.id).toMatch(UUID);
+    expect(wf).toMatchObject({ version: 1, name: "New workflow", revision: 1, enabled: false });
+    expect(wf.steps).toEqual([expect.objectContaining({ type: "fileAdded", folder: "~/Downloads", next: null })]);
+    expect(await a.listWorkflows()).toEqual([
+      expect.objectContaining({ id: wf.id, name: "New workflow", trigger: "File added · ~/Downloads", status: "ok" }),
+    ]);
+  });
+
+  it("builds a template with stable branch ids that link its steps", async () => {
+    const wf = await api().createWorkflow("receipts");
+    const classify = wf.steps.find((s) => s.type === "classify");
+    if (classify?.type !== "classify") throw new Error("no classify step");
+
+    const receipt = classify.categories.find((c) => c.label === "Receipt")!;
+    expect(wf.name).toBe("Sort receipts");
+    expect(wf.steps.find((s) => s.id === classify.branches[receipt.id])?.type).toBe("extract");
+    expect(await api().validateWorkflow(wf)).toEqual([]);
+  });
+
+  it("lists the model kinds a workflow's AI steps need", async () => {
+    const a = api();
+    await a.createWorkflow("receipts");
+    const [summary] = await a.listWorkflows();
+    expect(new Set(summary.kindsNeeded)).toEqual(new Set(["system1", "llm"]));
+  });
+
+  it("bumps the revision on every save", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    const { workflow } = await a.saveWorkflow({ ...wf, name: "Downloads tidy-up" });
+
+    expect(workflow.revision).toBe(2);
+    expect(await a.getWorkflow(wf.id)).toEqual(workflow);
+  });
+
+  it("refuses a save based on an older revision and keeps what's there", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    await a.saveWorkflow({ ...wf, name: "Saved elsewhere" });
+
+    await expect(a.saveWorkflow({ ...wf, name: "Stale edit" })).rejects.toMatchObject({ code: "conflict" });
+    expect((await a.getWorkflow(wf.id)).name).toBe("Saved elsewhere");
+  });
+
+  it("won't turn on a workflow with problems, and writes nothing", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    const broken = { ...wf, enabled: true, steps: [] };
+
+    await expect(a.saveWorkflow(broken)).rejects.toMatchObject({ code: "invalid" });
+    expect(await a.getWorkflow(wf.id)).toEqual(wf);
+  });
+
+  it("refuses ids that aren't UUIDs and unknown ones", async () => {
+    await expect(api().getWorkflow("../settings")).rejects.toMatchObject({ code: "invalid" });
+    await expect(api().getWorkflow("0f8c2b1e-6b0a-4c1e-9d6a-2f1f6c0f7a11")).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("deletes a workflow", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    await a.deleteWorkflow(wf.id);
+
+    expect(await a.listWorkflows()).toEqual([]);
+    await expect(a.getWorkflow(wf.id)).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("lists a damaged file without opening it", async () => {
+    const [summary] = await api({ damagedWorkflows: ["2b7e1c9a-0d3f-4e5a-8b6c-7d8e9f0a1b2c.json"] }).listWorkflows();
+    expect(summary).toMatchObject({ status: "damaged", name: "2b7e1c9a-0d3f-4e5a-8b6c-7d8e9f0a1b2c.json" });
+  });
+
+  it("reports a workflow with no trigger", async () => {
+    const wf = await api().createWorkflow(null);
+    expect((await api().validateWorkflow({ ...wf, steps: [] })).map((p) => p.code)).toEqual(["no_trigger"]);
+  });
+});

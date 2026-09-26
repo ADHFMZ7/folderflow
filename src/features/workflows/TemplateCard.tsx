@@ -1,13 +1,13 @@
 import type { Template } from "../../api/types";
-import { Card } from "../../ui";
 import styles from "./workflows.module.css";
 
-export function TemplateCard({ template: t }: { template: Template }) {
+/** A template; choosing it creates a workflow from it. */
+export function TemplateCard({ template: t, onUse }: { template: Template; onUse: (id: string) => void }) {
   return (
-    <Card className={styles.card}>
-      <h3>{t.name}</h3>
-      <p className={styles.muted}>{t.blurb}</p>
-      <p className={styles.trigger}>{t.trigger}</p>
-    </Card>
+    <button type="button" className={styles.template} onClick={() => onUse(t.id)}>
+      <strong className={styles.templateName}>{t.name}</strong>
+      <span className={styles.muted}>{t.blurb}</span>
+      <span className={styles.trigger}>{t.trigger}</span>
+    </button>
   );
 }

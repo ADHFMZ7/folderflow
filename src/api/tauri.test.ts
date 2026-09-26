@@ -29,6 +29,12 @@ describe("tauri api", () => {
     ["listModels", ["c1"], "list_models", { connectionId: "c1" }],
     ["listWorkflows", [], "list_workflows", {}],
     ["listTemplates", [], "list_templates", {}],
+    ["getWorkflow", ["w1"], "get_workflow", { id: "w1" }],
+    ["createWorkflow", ["receipts"], "create_workflow", { templateId: "receipts" }],
+    ["createWorkflow", [null], "create_workflow", { templateId: null }],
+    ["saveWorkflow", [{ id: "w1" }], "save_workflow", { workflow: { id: "w1" } }],
+    ["deleteWorkflow", ["w1"], "delete_workflow", { id: "w1" }],
+    ["validateWorkflow", [{ id: "w1" }], "validate_workflow", { workflow: { id: "w1" } }],
   ] as const)("%s invokes %s", async (method, args, cmd, expected) => {
     const calls = recordCalls();
     const api = createTauriApi() as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
@@ -55,6 +61,13 @@ describe("tauri api", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.code).toBe("too_new");
     expect(err.message).toContain("newer version");
+  });
+
+  it("passes on a conflict", async () => {
+    mockIPC(() => {
+      throw { code: "conflict", message: "this workflow was saved somewhere else" };
+    });
+    await expect(createTauriApi().saveWorkflow({} as never)).rejects.toMatchObject({ code: "conflict" });
   });
 
   it("wraps an unexpected failure as an io ApiError", async () => {

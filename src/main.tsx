@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { createMockApi, SAMPLE_WORKFLOWS } from "./api/mock";
+import { createMockApi } from "./api/mock";
 import { createTauriApi, inTauri } from "./api/tauri";
 import { App } from "./app/App";
 import "./theme/tokens.css";
@@ -17,7 +17,7 @@ const api = inTauri()
   : createMockApi({
     storage: localStorage,
     ollamaRunning: localStorage.getItem("folderflow.mock.ollama") !== "missing",
-    workflows: localStorage.getItem("folderflow.mock.workflows") === "sample" ? SAMPLE_WORKFLOWS : [],
+    sampleWorkflows: localStorage.getItem("folderflow.mock.workflows") === "sample",
     storedFile: (["damaged", "tooNew"] as const).find((v) => v === localStorage.getItem("folderflow.mock.settingsFile")),
   });
 

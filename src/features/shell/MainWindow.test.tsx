@@ -1,6 +1,5 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { SAMPLE_WORKFLOWS } from "../../api/mock";
 import { renderApp } from "../../test/render";
 
 describe("main window", () => {
@@ -10,10 +9,9 @@ describe("main window", () => {
     expect(await screen.findByRole("region", { name: "No workflows yet" })).toBeInTheDocument();
   });
 
-  it("lists workflows and counts the ones that need you", async () => {
-    renderApp({ settings: { setupComplete: true }, workflows: SAMPLE_WORKFLOWS });
-    expect(await screen.findByRole("heading", { name: "Receipts and invoices" })).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
+  it("counts the workflows that need you", async () => {
+    renderApp({ settings: { setupComplete: true }, sampleWorkflows: true });
+    expect(await screen.findByRole("link", { name: /Receipts and invoices/ })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(within(nav).getByRole("link", { name: /Workflows/ })).toHaveTextContent("1");
   });

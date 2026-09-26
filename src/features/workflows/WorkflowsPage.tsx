@@ -6,19 +6,25 @@ import { TemplateCard } from "./TemplateCard";
 import { WorkflowCard } from "./WorkflowCard";
 import styles from "./workflows.module.css";
 
-export function WorkflowsPage({ workflows, templates }: { workflows: WorkflowSummary[] | null; templates: Template[] }) {
+type Props = {
+  workflows: WorkflowSummary[] | null;
+  templates: Template[];
+  create: (templateId: string | null) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+};
+
+export function WorkflowsPage({ workflows, templates, create, remove }: Props) {
   return (
     <div className={styles.page}>
       <header className={styles.head}>
         <h1>Workflows</h1>
-        {/* The editor is the next step; until then there is nothing to open. */}
-        <Button disabled title="The workflow editor comes next">+ New workflow</Button>
+        <Button onClick={() => create(null)}>+ New workflow</Button>
       </header>
-      <MissingModelsBanner workflows={workflows ?? []} />
+      <MissingModelsBanner workflows={(workflows ?? []).filter((w) => w.status === "ok")} />
       {workflows === null ? <Spinner label="Loading workflows…" />
         : workflows.length ? (
-          <div className={styles.grid}>{workflows.map((w) => <WorkflowCard key={w.id} workflow={w} />)}</div>
-        ) : <EmptyState templates={templates.slice(0, 3)} />}
+          <div className={styles.grid}>{workflows.map((w) => <WorkflowCard key={w.id} workflow={w} onDelete={remove} />)}</div>
+        ) : <EmptyState templates={templates.slice(0, 3)} onUse={create} />}
     </div>
   );
 }
@@ -48,16 +54,15 @@ function MissingModelsBanner({ workflows }: { workflows: WorkflowSummary[] }) {
   );
 }
 
-function EmptyState({ templates }: { templates: Template[] }) {
+function EmptyState({ templates, onUse }: { templates: Template[]; onUse: (templateId: string | null) => void }) {
   return (
     <section className={styles.empty} aria-label="No workflows yet">
       <h2>No workflows yet</h2>
-      <p className={styles.muted}>Start from a blank canvas, describe what you want, or copy a template.</p>
+      <p className={styles.muted}>Start from a blank canvas, or copy a template and change it.</p>
       <div className={styles.actions}>
-        <Button disabled title="The workflow editor comes next">New workflow</Button>
-        <Button variant="secondary" disabled title="The workflow editor comes next">✦ Describe it</Button>
+        <Button variant="secondary" disabled title="Describing a workflow in words comes later">✦ Describe it</Button>
       </div>
-      <div className={styles.templates}>{templates.map((t) => <TemplateCard key={t.id} template={t} />)}</div>
+      <div className={styles.templates}>{templates.map((t) => <TemplateCard key={t.id} template={t} onUse={onUse} />)}</div>
     </section>
   );
 }
