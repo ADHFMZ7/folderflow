@@ -1,4 +1,5 @@
-.window { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+.window { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100%; }
+.collapsed { grid-template-columns: 52px minmax(0, 1fr); }
 .page { overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); }
 /* Every page sits in one centred column; pages may narrow it further. */
 .content { width: 100%; max-width: 1040px; margin-inline: auto; }
