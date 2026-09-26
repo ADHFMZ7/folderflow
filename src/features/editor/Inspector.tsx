@@ -1,8 +1,9 @@
-// The right-hand panel: the selected step's settings, or the workflow's problems
-// when nothing is selected. Every edit is reported as one whole new step through
-// onChange. See docs/step-settings.md.
+// The card that floats over the right of the canvas: the selected step's settings,
+// or the workflow's problems when those are asked for. Every edit is reported as
+// one whole new step through onChange. See docs/step-settings.md.
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
+import { X } from "lucide-react";
 import type { Problem, Step, Workflow } from "../../api/types";
 import { Button, Field, TextInput } from "../../ui";
 import { infoFor, KIND_LABEL } from "./catalog";
@@ -17,20 +18,35 @@ import stepStyles from "./steps/Steps.module.css";
 
 type Props = {
   workflow: Workflow;
+  /** The step to show; null shows the problems. */
   step: Step | null;
   problems: Problem[];
   stepTitle: (id: string) => string | null;
   onChange: (step: Step) => void;
   onDelete: (id: string) => void;
   onSelect: (id: string) => void;
+  onClose: () => void;
 };
 
-export function Inspector({ workflow, step, problems, stepTitle, onChange, onDelete, onSelect }: Props) {
+function Card({ title, onClose, children }: { title: ReactNode; onClose: () => void; children: ReactNode }) {
+  return (
+    <aside className={styles.inspector} aria-label="Inspector">
+      <div className={styles.cardHead}>
+        {title}
+        <button type="button" className={styles.close} aria-label="Close" title="Close" onClick={onClose}>
+          <X size={16} strokeWidth={1.8} aria-hidden />
+        </button>
+      </div>
+      {children}
+    </aside>
+  );
+}
+
+export function Inspector({ workflow, step, problems, stepTitle, onChange, onDelete, onSelect, onClose }: Props) {
   if (!step) {
     return (
-      <aside className={styles.inspector} aria-label="Inspector">
-        <h3>Problems</h3>
-        {problems.length === 0 ? <p className={styles.note}>No problems. Select a step to edit it.</p> : (
+      <Card title={<h3>Problems</h3>} onClose={onClose}>
+        {problems.length === 0 ? <p className={styles.note}>Nothing to fix.</p> : (
           <ul className={styles.problems} aria-label="Problems">
             {problems.map((p, i) => (
               <li key={i}>
@@ -43,13 +59,13 @@ export function Inspector({ workflow, step, problems, stepTitle, onChange, onDel
             ))}
           </ul>
         )}
-      </aside>
+      </Card>
     );
   }
-  return <StepSettings key={step.id} workflow={workflow} step={step} problems={problems} onChange={onChange} onDelete={onDelete} />;
+  return <StepSettings key={step.id} workflow={workflow} step={step} problems={problems} onChange={onChange} onDelete={onDelete} onClose={onClose} />;
 }
 
-function StepSettings({ workflow, step, problems, onChange, onDelete }: Pick<Props, "workflow" | "problems" | "onChange" | "onDelete"> & { step: Step }) {
+function StepSettings({ workflow, step, problems, onChange, onDelete, onClose }: Pick<Props, "workflow" | "problems" | "onChange" | "onDelete" | "onClose"> & { step: Step }) {
   const info = infoFor(step.type);
   const own = problems.filter((p) => p.stepId === step.id);
   const shown = SHOWN_FIELDS[step.type];
@@ -64,11 +80,11 @@ function StepSettings({ workflow, step, problems, onChange, onDelete }: Pick<Pro
   );
 
   return (
-    <aside className={styles.inspector} aria-label="Inspector">
+    <Card onClose={onClose} title={
       <p className={stepStyles.kindLine}>
         <span className={`${styles.glyph} ${styles[`kind-${info.kind}`]}`} aria-hidden>{info.glyph}</span>
         {KIND_LABEL[info.kind]} · {info.label}
-      </p>
+      </p>}>
       <Field label="Title">
         <TextInput value={step.title} onChange={(e) => onChange({ ...step, title: e.target.value })} />
       </Field>
@@ -84,6 +100,6 @@ function StepSettings({ workflow, step, problems, onChange, onDelete }: Pick<Pro
       </StepContext.Provider>
       <RunsOn type={step.type} />
       <Button variant="danger" onClick={() => onDelete(step.id)}>Delete step</Button>
-    </aside>
+    </Card>
   );
 }

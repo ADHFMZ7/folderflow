@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render";
+import { fileTrigger, openWith } from "./steps/testing";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -58,15 +59,37 @@ describe("studio", () => {
     });
   });
 
-  it("shows problems as the workflow changes, and selects the step they're about", async () => {
+  it("keeps the canvas clear until a step is selected, and closes the step's card again", async () => {
     const { user } = await openWorkflow();
+    expect(screen.queryByRole("complementary", { name: "Inspector" })).not.toBeInTheDocument();
+
+    await selectStep("Move to Screenshots");
+    expect(await screen.findByRole("complementary", { name: "Inspector" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "Inspector" })).not.toBeInTheDocument();
+  });
+
+  it("says nothing about problems until there are some, then lists them from the toolbar", async () => {
+    const { user } = await openWorkflow();
+    expect(screen.queryByText(/problem/i)).not.toBeInTheDocument();
 
     await selectStep("When an image lands on the Desktop");
     await user.click(screen.getByRole("button", { name: "Delete step" }));
+    await user.click(await screen.findByRole("button", { name: "1 problem" }));
 
     const problems = await screen.findByRole("list", { name: "Problems" });
     expect(problems).toHaveTextContent("Add a trigger to say when this workflow runs.");
-    expect(screen.getByText("1 problem")).toBeInTheDocument();
+  });
+
+  it("opens a step from the problem list", async () => {
+    const { user } = await openWith([fileTrigger(null, { folder: "" })], "When a file is added");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    await user.click(await screen.findByRole("button", { name: /problem/ }));
+    await user.click(within(screen.getByRole("list", { name: "Problems" })).getByRole("button", { name: /When a file is added/ }));
+
+    expect(await within(screen.getByRole("complementary", { name: "Inspector" })).findByDisplayValue("When a file is added")).toBeInTheDocument();
   });
 
   it("leaves without asking when nothing changed", async () => {
@@ -113,7 +136,17 @@ describe("studio", () => {
     await user.type(name, "Screenshots tidy-up");
 
     await waitFor(async () => expect(await api.getWorkflow(wf.id)).toMatchObject({ name: "Screenshots tidy-up" }));
-    expect(await screen.findByText("All changes saved")).toBeInTheDocument();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+
+  it("says nothing about saving while there's nothing to save, and \"Saved\" only briefly", async () => {
+    const { user } = await openWorkflow();
+    expect(screen.queryByText(/saved|saving/i)).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Saved")).not.toBeInTheDocument(), { timeout: 4000 });
   });
 
   it("saves at once with Cmd-S", async () => {

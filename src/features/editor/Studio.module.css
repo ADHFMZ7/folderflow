@@ -7,16 +7,31 @@
 .back { color: var(--accent); font-weight: 550; text-decoration: none; white-space: nowrap; }
 .back::before { content: "← "; }
 .name { width: 280px; font-weight: 650; }
-.unsaved { color: var(--warn); font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; }
-.saved, .muted { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+.muted { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
 .note { color: var(--muted); font-size: var(--fs-sm); }
-.problemCount { color: var(--danger); font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; }
+.notSaved { color: var(--danger); font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; }
+/* "Saved" holds, then fades before it goes (see SAVED_FLASH_MS). */
+.savedFlash { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; animation: fade-out 2s ease-in forwards; }
+@keyframes fade-out { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+.history { display: flex; gap: 2px; }
+.icon {
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  color: var(--muted); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.icon:not(:disabled):hover { color: var(--text); background: var(--select); }
+.icon:disabled { opacity: 0.4; cursor: default; }
+.problemCount {
+  padding: 3px 10px; border: 0; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: var(--fs-sm); font-weight: 600;
+}
+.problemCount:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); }
+@media (prefers-reduced-motion: reduce) { .savedFlash { animation: none; } }
 .spacer { flex: 1; }
 .alert {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-4);
   background: color-mix(in srgb, var(--danger) 10%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
-.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 
 /* palette */
 .palette { overflow: auto; padding: var(--space-2) var(--space-3) var(--space-5); }
@@ -30,8 +45,8 @@
 
 /* canvas */
 /* The canvas is a soft inset panel on the sheet. */
-.canvas { position: relative; min-width: 0; margin: var(--space-2) 0; border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
-.canvas :global(.react-flow) { --xy-background-color: var(--card); --xy-edge-stroke: var(--muted); --xy-controls-button-background-color: var(--panel); --xy-controls-button-color: var(--text); --xy-minimap-background-color: var(--panel); --xy-minimap-mask-background-color: rgb(128 128 128 / 0.2); }
+.canvas { position: relative; min-width: 0; margin: var(--space-2) var(--space-2) var(--space-2) 0; border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
+.canvas :global(.react-flow) { --xy-background-color: var(--card); --xy-edge-stroke: var(--muted); --xy-controls-button-background-color: var(--panel); --xy-controls-button-color: var(--text); --xy-minimap-background-color: var(--panel); --xy-minimap-mask-background-color: rgb(128 128 128 / 0.2); --xy-minimap-node-background-color: color-mix(in srgb, var(--muted) 45%, transparent); }
 .canvas :global(.react-flow__edge-text) { fill: var(--muted); font-size: 12px; }
 .canvas :global(.react-flow__edge-textbg) { fill: var(--bg); }
 .canvas :global(.react-flow__edge.selected path) { stroke: var(--accent); stroke-width: 2; }
@@ -61,8 +76,20 @@
 .branchLabels { display: flex; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--muted); }
 .branchLabels span { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* inspector */
-.inspector { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-left: 1px solid var(--hairline); }
+/* inspector: a card floating over the right of the canvas */
+.inspector {
+  position: absolute; z-index: 5; top: var(--space-3); right: var(--space-3); bottom: var(--space-3); width: min(340px, calc(100% - 2 * var(--space-3)));
+  overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4);
+  background: var(--sheet); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.05), 0 14px 36px rgb(0 0 0 / 0.12);
+  animation: card-in 0.16s ease-out;
+}
+@keyframes card-in { from { opacity: 0; transform: translateX(8px); } }
+@media (prefers-reduced-motion: reduce) { .inspector { animation: none; } }
+.cardHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.cardHead h3 { margin: 0; }
+.close { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: var(--muted); background: transparent; border: 0; border-radius: var(--radius-sm); cursor: pointer; }
+.close:hover { color: var(--text); background: var(--select); }
 .problems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .problem {
   display: flex; flex-direction: column; gap: 2px; width: 100%; padding: var(--space-2) var(--space-3); text-align: left;

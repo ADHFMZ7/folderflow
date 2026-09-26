@@ -30,6 +30,8 @@ What these teach us:
 
 ## The inspector
 
+A card that floats over the right of the canvas while a step is selected; if it would cover that step, the canvas slides over. Closing it, or clicking the empty canvas, clears the selection. The same card lists the workflow's problems when the problem count in the toolbar is clicked (the count only shows when there are problems).
+
 Top to bottom, for every step:
 
 1. **Kind line**: glyph and label ("AI · Extract"), as on the card.

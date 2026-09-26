@@ -1,4 +1,5 @@
-/* Design tokens: the Paper look in the Cobalt palette (see the UX spec, "Visual direction").
+/* Design tokens: the Paper look in the Cobalt palette (see the UX spec, "Visual direction"),
+   on Oat neutrals in light mode: warm cream surfaces and ink-brown text.
    Components use these variables only; no colour or size is written anywhere else.
    Each colour is light-dark(light, dark). The page follows the Mac unless the
    Appearance setting puts data-theme on <html> (src/theme/appearance.ts). */
@@ -6,13 +7,13 @@
 :root {
   color-scheme: light dark;
 
-  --bg: light-dark(#eceff3, #10141c);
-  --panel: light-dark(#f7f8fa, #171c26);
-  --panel-2: light-dark(#e3e7ed, #1c2230);
-  --text: light-dark(#121a2b, #e6eaf2);
-  --muted: light-dark(#56617a, #8e98ad);
-  --line: light-dark(#c9d0dc, #2a3242);
-  --accent: light-dark(#1f47d6, #5b7cff);
+  --bg: light-dark(#eae3d5, #10141c);
+  --panel: light-dark(#f7f2e8, #171c26);
+  --panel-2: light-dark(#e2d9c7, #1c2230);
+  --text: light-dark(#211d16, #e6eaf2);
+  --muted: light-dark(#6b6356, #8e98ad);
+  --line: light-dark(#d4cbb9, #2a3242);
+  --accent: light-dark(#1d40bd, #5b7cff);
   --accent-text: light-dark(#ffffff, #0b0f17);
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --ok: light-dark(#1d7a55, #4fbf8e);
@@ -22,9 +23,9 @@
   /* Window surfaces (the Sheet style): the title bar area and sidebar share one
      tone, and each page sits on a raised sheet. Separation comes from tone and
      hairlines, not borders. */
-  --chrome: light-dark(#e4e8ee, #0b0e14);
-  --sheet: light-dark(#fbfcfd, #161b24);
-  --card: light-dark(#f3f5f8, #1c2230);
+  --chrome: light-dark(#e6dfd1, #0b0e14);
+  --sheet: light-dark(#fbf7ee, #161b24);
+  --card: light-dark(#f3ede1, #1c2230);
   --hairline: color-mix(in srgb, var(--line) 55%, transparent);
   --select: color-mix(in srgb, var(--text) 7%, transparent);
   /* The macOS traffic lights sit over the top-left corner (overlay title bar).
