@@ -1,4 +1,14 @@
-.sidebar { display: flex; flex-direction: column; justify-content: space-between; padding: var(--space-4) var(--space-2); background: var(--panel-2); border-right: 1px solid var(--line); }
+.sidebar, .rail { display: flex; flex-direction: column; gap: var(--space-2); background: var(--panel-2); border-right: 1px solid var(--line); min-width: 0; }
+.sidebar { padding: var(--space-3) var(--space-2) var(--space-4); }
+.rail { align-items: center; padding: var(--space-3) 0; }
+.spacer { flex: 1; }
+.menu {
+  display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; padding: 0; margin-left: var(--space-1);
+  color: var(--muted); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.rail .menu { margin-left: 0; }
+.menu:hover { color: var(--text); background: var(--panel); }
+.railBadge { display: flex; }
 .items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .item, .current {
   display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3);
