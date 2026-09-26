@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use folderflow_lib::api::catalog;
 use folderflow_lib::api::types::{
     ApiError, ConnectOutcome, Credentials, DetectResult, ErrorCode, LoadedSettings, Model,
-    SettingsChange, SettingsNotice, WorkflowSummary,
+    SettingsChange, SettingsNotice, WorkflowStatus, WorkflowSummary,
 };
 use folderflow_lib::storage::settings::{Connection, ModelRef, Settings};
 use serde_json::{json, Value};
@@ -259,15 +259,28 @@ fn a_workflow_summary_uses_camel_case_and_null_for_never_run() {
         last_run: None,
         needs_you: 2,
         kinds_needed: vec!["llm".into()],
+        status: WorkflowStatus::Ok,
     };
 
     assert_eq!(
         to_json(&summary),
         json!({
             "id": "w1", "name": "Receipts", "trigger": "File added", "enabled": true,
-            "lastRun": null, "needsYou": 2, "kindsNeeded": ["llm"]
+            "lastRun": null, "needsYou": 2, "kindsNeeded": ["llm"], "status": "ok"
         })
     );
+}
+
+#[test]
+fn a_workflow_summary_status_is_ok_damaged_or_too_new() {
+    let cases = [
+        (WorkflowStatus::Ok, "ok"),
+        (WorkflowStatus::Damaged, "damaged"),
+        (WorkflowStatus::TooNew, "tooNew"),
+    ];
+    for (status, text) in cases {
+        assert_eq!(to_json(&status), json!(text));
+    }
 }
 
 #[test]
@@ -279,6 +292,7 @@ fn api_errors_carry_a_snake_case_code_and_a_message() {
         (ErrorCode::Keychain, "keychain"),
         (ErrorCode::Provider, "provider"),
         (ErrorCode::Io, "io"),
+        (ErrorCode::Conflict, "conflict"),
     ];
 
     for (code, text) in cases {

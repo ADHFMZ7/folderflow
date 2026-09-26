@@ -5,14 +5,18 @@
 pub mod catalog;
 pub mod commands;
 pub mod providers;
+mod summary;
 pub mod types;
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::storage::connections::Connections;
 use crate::storage::data_dir::DataDir;
 use crate::storage::secrets::{Secret, SecretStore};
 use crate::storage::settings::{LoadOutcome, ModelRef, Settings, SettingsStore};
+use crate::storage::workflows::{WorkflowError, WorkflowStore};
+use crate::workflow::{templates, validate, Problem, SaveResult, Workflow};
 
 use providers::{CheckError, ModelSource, ProviderClient, RemoteModel};
 use types::{
@@ -28,6 +32,8 @@ pub struct Backend<P> {
     settings: SettingsStore,
     secrets: Arc<dyn SecretStore>,
     providers: P,
+    /// Serialises its own writes, so workflow saves can't interleave.
+    workflows: WorkflowStore,
     /// Every settings read-modify-write happens while holding this, so commands
     /// running at the same time can't overwrite each other's changes.
     state: Mutex<State>,
@@ -44,6 +50,7 @@ impl<P: ProviderClient> Backend<P> {
     pub fn new(dir: DataDir, secrets: Arc<dyn SecretStore>, providers: P) -> Self {
         Self {
             settings: SettingsStore::new(&dir),
+            workflows: WorkflowStore::new(&dir),
             secrets,
             providers,
             state: Mutex::new(State::default()),
@@ -220,8 +227,52 @@ impl<P: ProviderClient> Backend<P> {
         Ok(to_models(&provider, &connection.id, models))
     }
 
-    pub fn list_workflows(&self) -> Vec<WorkflowSummary> {
-        Vec::new()
+    /// Every workflow file, sorted by name. A damaged or newer file is listed
+    /// by its file name and never changed.
+    pub fn list_workflows(&self) -> Result<Vec<WorkflowSummary>, ApiError> {
+        let listed = self.workflows.list().map_err(WorkflowError::from)?;
+        let mut out: Vec<WorkflowSummary> = listed.into_iter().map(summary::of).collect();
+        out.sort_by(|a, b| {
+            a.name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        Ok(out)
+    }
+
+    pub fn get_workflow(&self, id: &str) -> Result<Workflow, ApiError> {
+        Ok(self.workflows.get(id)?)
+    }
+
+    /// A blank workflow, or a copy of a template, saved at revision 1.
+    pub fn create_workflow(&self, template_id: Option<String>) -> Result<Workflow, ApiError> {
+        let workflow = match template_id.as_deref() {
+            None => templates::blank(),
+            Some(id) => templates::build(id).ok_or_else(|| {
+                ApiError::new(
+                    ErrorCode::NotFound,
+                    "FolderFlow doesn't know that template.",
+                )
+            })?,
+        };
+        Ok(self.workflows.create(workflow)?)
+    }
+
+    pub fn save_workflow(&self, workflow: Workflow) -> Result<SaveResult, ApiError> {
+        let models = self.working_models()?;
+        Ok(self.workflows.save(workflow, &models)?)
+    }
+
+    /// Moves the workflow's file to the trash.
+    pub fn delete_workflow(&self, id: &str) -> Result<(), ApiError> {
+        self.workflows.delete(id)?;
+        Ok(())
+    }
+
+    pub fn validate_workflow(&self, workflow: Workflow) -> Result<Vec<Problem>, ApiError> {
+        let models = self.working_models()?;
+        Ok(validate(&workflow, &models))
     }
 
     pub fn list_templates(&self) -> Vec<Template> {
@@ -231,6 +282,22 @@ impl<P: ProviderClient> Backend<P> {
     fn lock(&self) -> MutexGuard<'_, State> {
         // A panic mid-command leaves nothing half-written (saves are atomic).
         self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The model kinds whose default model is on a connection that exists.
+    fn working_models(&self) -> Result<BTreeSet<String>, ApiError> {
+        let mut state = self.lock();
+        let settings = self.load(&mut state)?;
+        Ok(settings
+            .defaults
+            .iter()
+            .filter(|(_, model)| {
+                model
+                    .as_ref()
+                    .is_some_and(|m| settings.connections.iter().any(|c| c.id == m.connection_id))
+            })
+            .map(|(kind, _)| kind.clone())
+            .collect())
     }
 
     /// Loads the settings, remembering a recovery so it keeps being reported.

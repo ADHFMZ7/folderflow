@@ -9,6 +9,7 @@ use ts_rs::TS;
 use crate::storage::connections::ConnectionError;
 use crate::storage::secrets::{Secret, SecretError};
 use crate::storage::settings::{Connection, ModelRef, Settings, SettingsError};
+use crate::storage::workflows::WorkflowError;
 
 /// What `get_settings` returns.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -204,6 +205,20 @@ pub struct WorkflowSummary {
     pub last_run: Option<String>,
     pub needs_you: u32,
     pub kinds_needed: Vec<String>,
+    pub status: WorkflowStatus,
+}
+
+/// Whether a workflow's file could be read. For `damaged` and `tooNew`, the
+/// summary's `name` is the file name and its other fields are empty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum WorkflowStatus {
+    Ok,
+    /// The file can't be read. It is kept as it is.
+    Damaged,
+    /// Written by a newer FolderFlow.
+    TooNew,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -226,6 +241,8 @@ pub enum ErrorCode {
     Keychain,
     Provider,
     Io,
+    /// A save was based on an older revision than the one on disk.
+    Conflict,
 }
 
 /// How a command fails. The message is shown to the user and never holds a key.
@@ -279,6 +296,44 @@ impl From<ConnectionError> for ApiError {
             ConnectionError::NotFound(_) => {
                 Self::new(ErrorCode::NotFound, "That connection no longer exists.")
             }
+        }
+    }
+}
+
+impl From<WorkflowError> for ApiError {
+    fn from(e: WorkflowError) -> Self {
+        match e {
+            WorkflowError::InvalidId => Self::new(ErrorCode::Invalid, "That isn't a workflow id."),
+            WorkflowError::NotFound => {
+                Self::new(ErrorCode::NotFound, "That workflow no longer exists.")
+            }
+            WorkflowError::TooNew { .. } => Self::new(
+                ErrorCode::TooNew,
+                "This workflow was saved by a newer version of FolderFlow. Update FolderFlow to use it.",
+            ),
+            WorkflowError::NotAFile => Self::new(
+                ErrorCode::Invalid,
+                "This workflow's file is a link or a folder, so FolderFlow won't open it.",
+            ),
+            WorkflowError::Damaged => Self::new(
+                ErrorCode::Io,
+                "This workflow's file can't be read. It has been left as it is.",
+            ),
+            WorkflowError::Conflict { .. } => Self::new(
+                ErrorCode::Conflict,
+                "This workflow was changed somewhere else. Reopen it to see the latest version.",
+            ),
+            WorkflowError::NotClean(problems) => Self::new(
+                ErrorCode::Invalid,
+                match problems.len() {
+                    1 => "Fix the problem with this workflow before turning it on.".to_string(),
+                    n => format!("Fix the {n} problems with this workflow before turning it on."),
+                },
+            ),
+            WorkflowError::Io(e) => Self::new(
+                ErrorCode::Io,
+                format!("Couldn't read or save the workflow: {e}"),
+            ),
         }
     }
 }

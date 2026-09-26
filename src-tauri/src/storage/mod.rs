@@ -7,3 +7,4 @@ pub mod connections;
 pub mod data_dir;
 pub mod secrets;
 pub mod settings;
+pub mod workflows;

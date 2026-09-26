@@ -25,4 +25,9 @@ impl DataDir {
     pub fn settings_path(&self) -> PathBuf {
         self.root.join("settings.json")
     }
+
+    /// Where workflow files live: `workflows/<id>.json`.
+    pub fn workflows_path(&self) -> PathBuf {
+        self.root.join("workflows")
+    }
 }
