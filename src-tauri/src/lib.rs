@@ -20,7 +20,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let dir = DataDir::open(app.path().app_data_dir()?)?;
             // Keys go in the Keychain under the bundle id, com.adhfmz7.folderflow.
@@ -30,7 +29,7 @@ pub fn run() {
                 app.path().home_dir()?,
                 Ports {
                     clock: Arc::new(SystemClock),
-                    notifier: Arc::new(AppNotifier(app.handle().clone())),
+                    notifier: Arc::new(AppNotifier::new(&app.config().identifier)),
                     events: Arc::new(AppEvents(app.handle().clone())),
                 },
             )?;
