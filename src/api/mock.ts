@@ -62,7 +62,7 @@ export const TEMPLATES: Template[] = [
   { id: "paperwork", name: "Paperwork inbox", blurb: "Sort receipts, invoices and contracts from Downloads: rename, file and log them, and ask before big invoices", trigger: "File added" },
 ];
 
-export const FRESH_SETTINGS: Settings = { setupComplete: false, openAtLogin: true, connections: [], defaults: {} };
+export const FRESH_SETTINGS: Settings = { setupComplete: false, openAtLogin: true, appearance: "system", connections: [], defaults: {} };
 
 type KeyValueStore = Pick<Storage, "getItem" | "setItem">;
 

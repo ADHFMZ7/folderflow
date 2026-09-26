@@ -49,9 +49,13 @@ export type ConnectOutcome =
   | { ok: true; connection: Connection; settings: Settings }
   | { ok: false; error: string };
 
+/** Light or dark, or whichever the Mac is using. */
+export type Appearance = "system" | "light" | "dark";
+
 export type Settings = {
   setupComplete: boolean;
   openAtLogin: boolean;
+  appearance: Appearance;
   connections: Connection[];
   /** The model each kind uses unless a step overrides it. */
   defaults: Record<ModelKindId, ModelRef | null>;
@@ -63,7 +67,7 @@ export type SettingsNotice = { kind: "recovered"; backup: string } | null;
 export type LoadedSettings = { settings: Settings; notice: SettingsNotice };
 
 /** The parts of Settings the front end may change. Connections change only through connect and remove. */
-export type SettingsChange = Partial<Pick<Settings, "setupComplete" | "openAtLogin" | "defaults">>;
+export type SettingsChange = Partial<Pick<Settings, "setupComplete" | "openAtLogin" | "appearance" | "defaults">>;
 
 export type ApiErrorCode = "too_new" | "not_found" | "invalid" | "keychain" | "provider" | "io" | "conflict";
 

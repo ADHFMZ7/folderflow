@@ -8,7 +8,7 @@ use ts_rs::TS;
 
 use crate::storage::connections::ConnectionError;
 use crate::storage::secrets::{Secret, SecretError};
-use crate::storage::settings::{Connection, ModelRef, Settings, SettingsError};
+use crate::storage::settings::{Appearance, Connection, ModelRef, Settings, SettingsError};
 use crate::storage::workflows::WorkflowError;
 
 /// What `get_settings` returns.
@@ -35,6 +35,7 @@ pub enum SettingsNotice {
 pub struct SettingsChange {
     pub setup_complete: Option<bool>,
     pub open_at_login: Option<bool>,
+    pub appearance: Option<Appearance>,
     /// Replaces the whole map when present.
     pub defaults: Option<BTreeMap<String, Option<ModelRef>>>,
 }

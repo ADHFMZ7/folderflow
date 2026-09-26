@@ -25,12 +25,14 @@ import type { Condition as GCondition } from "./generated/Condition";
 import type { Problem as GProblem } from "./generated/Problem";
 import type { ProblemCode as GProblemCode } from "./generated/ProblemCode";
 import type { SaveResult as GSaveResult } from "./generated/SaveResult";
+import type { Appearance as GAppearance } from "./generated/Appearance";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Check<T extends true> = T;
 
 export type ContractChecks = [
   Check<Same<GSettings, T.Settings>>,
+  Check<Same<GAppearance, T.Appearance>>,
   Check<Same<GConnection, T.Connection>>,
   Check<Same<GConnectOutcome, T.ConnectOutcome>>,
   Check<Same<GDetectResult, T.DetectResult>>,
