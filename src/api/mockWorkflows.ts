@@ -85,12 +85,12 @@ export function summarize(wf: Workflow, run?: { needsYou: number; lastRun: strin
   const kinds = [...new Set(wf.steps.map((s) => KIND_OF[s.type]).filter((k): k is string => !!k))];
   return {
     id: wf.id, name: wf.name, trigger: triggerText(wf), enabled: wf.enabled,
-    lastRun: run?.lastRun ?? null, needsYou: run?.needsYou ?? 0, kindsNeeded: kinds, status: "ok",
+    lastRun: run?.lastRun ?? null, needsYou: run?.needsYou ?? 0, kindsNeeded: kinds, status: "ok", hasDraft: false,
   };
 }
 
 export function damagedSummary(fileName: string): WorkflowSummary {
-  return { id: fileName, name: fileName, trigger: "", enabled: false, lastRun: null, needsYou: 0, kindsNeeded: [], status: "damaged" };
+  return { id: fileName, name: fileName, trigger: "", enabled: false, lastRun: null, needsYou: 0, kindsNeeded: [], status: "damaged", hasDraft: false };
 }
 
 /** A small part of the real rules: triggers and exits that point nowhere. */

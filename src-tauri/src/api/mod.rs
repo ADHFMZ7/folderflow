@@ -270,6 +270,28 @@ impl<P: ProviderClient> Backend<P> {
         Ok(())
     }
 
+    /// The changes to a running workflow that aren't live yet, if any.
+    pub fn get_draft(&self, id: &str) -> Result<Option<Workflow>, ApiError> {
+        Ok(self.workflows.get_draft(id)?)
+    }
+
+    /// Autosaves edits to a draft, never to the running workflow.
+    pub fn save_draft(&self, draft: Workflow) -> Result<SaveResult, ApiError> {
+        let models = self.working_models()?;
+        Ok(self.workflows.save_draft(draft, &models)?)
+    }
+
+    /// Makes the draft the running workflow.
+    pub fn apply_draft(&self, id: &str) -> Result<SaveResult, ApiError> {
+        let models = self.working_models()?;
+        Ok(self.workflows.apply_draft(id, &models)?)
+    }
+
+    /// Moves the draft to the trash.
+    pub fn discard_draft(&self, id: &str) -> Result<(), ApiError> {
+        Ok(self.workflows.discard_draft(id)?)
+    }
+
     pub fn validate_workflow(&self, workflow: Workflow) -> Result<Vec<Problem>, ApiError> {
         let models = self.working_models()?;
         Ok(validate(&workflow, &models))

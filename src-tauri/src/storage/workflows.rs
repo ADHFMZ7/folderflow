@@ -1,10 +1,11 @@
-//! workflows/<id>.json: one file per workflow. See docs/workflow-format.md.
+//! workflows/<id>.json: one file per workflow, and workflows/<id>.draft.json for
+//! edits to a running workflow that aren't live yet. See docs/workflow-format.md.
 
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,6 +19,8 @@ pub struct Listed {
     pub id: String,
     pub file_name: String,
     pub entry: Entry,
+    /// Whether there are changes waiting in a draft.
+    pub has_draft: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,10 +91,12 @@ impl WorkflowStore {
                 OnDisk::TooNew(found) => Entry::TooNew(found),
                 OnDisk::Current(workflow) => Entry::Ok(workflow),
             };
+            let has_draft = fs::symlink_metadata(self.draft_path(id)).is_ok();
             out.push(Listed {
                 id: id.to_owned(),
                 file_name,
                 entry,
+                has_draft,
             });
         }
         out.sort_by(|a, b| a.file_name.cmp(&b.file_name));
@@ -162,7 +167,8 @@ impl WorkflowStore {
     }
 
     /// Moves the workflow's file to `.trash/<id>-<unix time>.json` and returns
-    /// where it went. A damaged file can be deleted too; a newer one can't.
+    /// where it went. A damaged file can be deleted too; a newer one can't. A
+    /// draft goes to the trash with it.
     pub fn delete(&self, id: &str) -> Result<PathBuf, WorkflowError> {
         check_id(id)?;
         let _guard = self.lock();
@@ -170,11 +176,141 @@ impl WorkflowStore {
             OnDisk::Current(_) | OnDisk::Damaged => {}
             other => return Err(other.into_error()),
         }
+        let to = self.trash(&self.path(id), id)?;
+        if let OnDisk::Current(_) | OnDisk::Damaged = self.read_draft(id)? {
+            self.trash(&self.draft_path(id), &format!("{id}.draft"))?;
+        }
+        Ok(to)
+    }
+
+    /// The draft of a workflow, if it has one. A draft left behind by an older
+    /// revision (say, after a crash right after applying) moves to the trash.
+    pub fn get_draft(&self, id: &str) -> Result<Option<Workflow>, WorkflowError> {
+        check_id(id)?;
+        let _guard = self.lock();
+        let live = self.current(id)?;
+        match self.read_draft(id)? {
+            OnDisk::Missing => Ok(None),
+            OnDisk::Current(draft) if draft.revision == live.revision => Ok(Some(draft)),
+            OnDisk::Current(_) => {
+                self.trash(&self.draft_path(id), &format!("{id}.draft"))?;
+                Ok(None)
+            }
+            other => Err(other.into_error()),
+        }
+    }
+
+    /// Saves edits to a draft, never to the running file. The draft keeps the
+    /// revision it started from and the running workflow's on/off state.
+    /// Problems don't stop a draft from being saved.
+    pub fn save_draft(
+        &self,
+        draft: Workflow,
+        models: &BTreeSet<String>,
+    ) -> Result<SaveResult, WorkflowError> {
+        check_id(&draft.id)?;
+        let _guard = self.lock();
+        let live = self.current(&draft.id)?;
+        match self.read_draft(&draft.id)? {
+            OnDisk::Missing | OnDisk::Current(_) => {}
+            // Unreadable: keep a copy before replacing it.
+            OnDisk::Damaged => {
+                self.trash(&self.draft_path(&draft.id), &format!("{}.draft", draft.id))?;
+            }
+            other => return Err(other.into_error()),
+        }
+        if draft.revision != live.revision {
+            return Err(WorkflowError::Conflict {
+                on_disk: live.revision,
+            });
+        }
+        let problems = validate(&draft, models);
+        let draft = Workflow {
+            version: WORKFLOW_VERSION,
+            revision: live.revision,
+            enabled: live.enabled,
+            ..draft
+        };
+        self.write_at(&self.draft_path(&draft.id), &draft)?;
+        Ok(SaveResult {
+            workflow: draft,
+            problems,
+        })
+    }
+
+    /// Makes the draft the running workflow, at the next revision, and removes
+    /// it. A running workflow only takes a draft with no problems; if anything
+    /// is refused, nothing is written.
+    pub fn apply_draft(
+        &self,
+        id: &str,
+        models: &BTreeSet<String>,
+    ) -> Result<SaveResult, WorkflowError> {
+        check_id(id)?;
+        let _guard = self.lock();
+        let live = self.current(id)?;
+        let draft = match self.read_draft(id)? {
+            OnDisk::Current(draft) => draft,
+            other => return Err(other.into_error()),
+        };
+        if draft.revision != live.revision {
+            return Err(WorkflowError::Conflict {
+                on_disk: live.revision,
+            });
+        }
+        let problems = validate(&draft, models);
+        if live.enabled && !problems.is_empty() {
+            return Err(WorkflowError::NotClean(problems));
+        }
+        let revision = live
+            .revision
+            .checked_add(1)
+            .ok_or(WorkflowError::Conflict {
+                on_disk: live.revision,
+            })?;
+        let workflow = Workflow {
+            version: WORKFLOW_VERSION,
+            revision,
+            enabled: live.enabled,
+            ..draft
+        };
+        self.write(&workflow)?;
+        // Its content now lives in the running file.
+        fs::remove_file(self.draft_path(id))?;
+        File::open(&self.dir)?.sync_all()?;
+        Ok(SaveResult { workflow, problems })
+    }
+
+    /// Moves the draft to the trash. With no draft, does nothing.
+    pub fn discard_draft(&self, id: &str) -> Result<(), WorkflowError> {
+        check_id(id)?;
+        let _guard = self.lock();
+        self.current(id)?;
+        match self.read_draft(id)? {
+            OnDisk::Missing => Ok(()),
+            OnDisk::Current(_) | OnDisk::Damaged => {
+                self.trash(&self.draft_path(id), &format!("{id}.draft"))?;
+                Ok(())
+            }
+            other => Err(other.into_error()),
+        }
+    }
+
+    /// The running workflow, or why it can't be used.
+    fn current(&self, id: &str) -> Result<Workflow, WorkflowError> {
+        match self.read(id)? {
+            OnDisk::Current(workflow) => Ok(workflow),
+            other => Err(other.into_error()),
+        }
+    }
+
+    /// Moves a file to `.trash/<stem>-<unix time>.json` and returns where it
+    /// went. A hard link fails if the name is taken, so an earlier copy is
+    /// never replaced, even by another process.
+    fn trash(&self, from: &Path, stem: &str) -> io::Result<PathBuf> {
         let trash = self.dir.join(".trash");
         fs::create_dir_all(&trash)?;
         fs::set_permissions(&trash, fs::Permissions::from_mode(0o700))?;
-
-        let from = self.path(id);
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -182,20 +318,18 @@ impl WorkflowStore {
         let mut n = 1;
         let to = loop {
             let name = if n == 1 {
-                format!("{id}-{stamp}.json")
+                format!("{stem}-{stamp}.json")
             } else {
-                format!("{id}-{stamp}-{n}.json")
+                format!("{stem}-{stamp}-{n}.json")
             };
             let to = trash.join(name);
-            // A hard link fails if the name is taken, so an earlier copy is
-            // never replaced, even by another process.
-            match fs::hard_link(&from, &to) {
+            match fs::hard_link(from, &to) {
                 Ok(()) => break to,
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => n += 1,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             }
         };
-        fs::remove_file(&from)?;
+        fs::remove_file(from)?;
         File::open(&self.dir)?.sync_all()?;
         Ok(to)
     }
@@ -209,23 +343,39 @@ impl WorkflowStore {
         self.dir.join(format!("{id}.json"))
     }
 
+    fn draft_path(&self, id: &str) -> PathBuf {
+        self.dir.join(format!("{id}.draft.json"))
+    }
+
     fn write(&self, workflow: &Workflow) -> io::Result<()> {
+        self.write_at(&self.path(&workflow.id), workflow)
+    }
+
+    fn write_at(&self, path: &Path, workflow: &Workflow) -> io::Result<()> {
         fs::create_dir_all(&self.dir)?;
         fs::set_permissions(&self.dir, fs::Permissions::from_mode(0o700))?;
         let bytes = serde_json::to_vec_pretty(workflow).map_err(io::Error::other)?;
-        write_atomic(&self.path(&workflow.id), &bytes)
+        write_atomic(path, &bytes)
     }
 
     /// What is at the workflow's path, without following links.
     fn read(&self, id: &str) -> io::Result<OnDisk> {
-        let path = self.path(id);
-        match fs::symlink_metadata(&path) {
+        self.read_at(&self.path(id), id)
+    }
+
+    /// What is at the workflow's draft path, without following links.
+    fn read_draft(&self, id: &str) -> io::Result<OnDisk> {
+        self.read_at(&self.draft_path(id), id)
+    }
+
+    fn read_at(&self, path: &Path, id: &str) -> io::Result<OnDisk> {
+        match fs::symlink_metadata(path) {
             Ok(meta) if !meta.file_type().is_file() => return Ok(OnDisk::NotAFile),
             Ok(_) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(OnDisk::Missing),
             Err(e) => return Err(e),
         }
-        let bytes = match fs::read(&path) {
+        let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(OnDisk::Missing),
             Err(e) => return Err(e),

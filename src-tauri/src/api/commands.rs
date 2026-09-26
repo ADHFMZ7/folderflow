@@ -107,6 +107,35 @@ pub async fn delete_workflow(backend: State<'_, AppBackend>, id: String) -> Resu
 }
 
 #[tauri::command]
+pub async fn get_draft(
+    backend: State<'_, AppBackend>,
+    id: String,
+) -> Result<Option<Workflow>, ApiError> {
+    backend.get_draft(&id)
+}
+
+#[tauri::command]
+pub async fn save_draft(
+    backend: State<'_, AppBackend>,
+    workflow: Workflow,
+) -> Result<SaveResult, ApiError> {
+    backend.save_draft(workflow)
+}
+
+#[tauri::command]
+pub async fn apply_draft(
+    backend: State<'_, AppBackend>,
+    id: String,
+) -> Result<SaveResult, ApiError> {
+    backend.apply_draft(&id)
+}
+
+#[tauri::command]
+pub async fn discard_draft(backend: State<'_, AppBackend>, id: String) -> Result<(), ApiError> {
+    backend.discard_draft(&id)
+}
+
+#[tauri::command]
 pub async fn validate_workflow(
     backend: State<'_, AppBackend>,
     workflow: Workflow,

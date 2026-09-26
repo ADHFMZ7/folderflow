@@ -137,6 +137,30 @@ Rules:
 - `create_workflow(null)` makes a blank workflow named "New workflow" with one `fileAdded` step (folder `~/Downloads`, any file type, no subfolders). A template id makes a copy of that template with a new id.
 - `conflict` joins the error codes in `docs/api-contract.md`.
 
+## Drafts
+
+The editor saves automatically. For a workflow that is **off**, it saves straight to the workflow file with `save_workflow`. For a workflow that is **on**, a half-finished change must never run, so edits go to a **draft** instead, and only **Apply** makes them live.
+
+- The draft is `workflows/<id>.draft.json`, in the same format. Its `revision` is the revision of the running workflow it was started from, and its `enabled` always matches the running workflow.
+- Only the running workflow runs. A draft never changes the running file or its revision until it's applied.
+
+| Api method | Command | Arguments | Returns |
+| --- | --- | --- | --- |
+| `getDraft(id)` | `get_draft` | `id` | `Workflow \| null` |
+| `saveDraft(workflow)` | `save_draft` | `workflow` | `{ workflow, problems }` (the draft as saved) |
+| `applyDraft(id)` | `apply_draft` | `id` | `{ workflow, problems }` (the running workflow, revision + 1) |
+| `discardDraft(id)` | `discard_draft` | `id` | nothing |
+
+Rules:
+
+- **`save_draft`** fails with `conflict` if the draft's `revision` isn't the running workflow's, and with `not_found` if the workflow doesn't exist. Problems don't stop a draft from being saved.
+- **`apply_draft`** replaces the running workflow with the draft at `revision + 1` and removes the draft. It fails with `not_found` if there's no draft, with `conflict` if the running workflow changed since the draft was started, and with `invalid` if the workflow is on and the draft has problems. When it fails, nothing is written.
+- **`discard_draft`** moves the draft to the trash. With no draft it does nothing.
+- **A stale draft** (its revision is behind the running workflow, for example after a crash right after applying) is moved to the trash by `get_draft`, which then returns `null`.
+- **A damaged or newer draft** is left untouched: `get_draft` fails with `io` or `too_new`. The running workflow still opens.
+- **`delete_workflow`** moves the draft to the trash too. Drafts in the trash are named `<id>.draft-<unix time>.json`.
+- `WorkflowSummary` gains `hasDraft: boolean`: whether the workflow has changes that aren't live yet.
+
 ## Templates
 
 `list_templates` keeps returning `{ id, name, blurb, trigger }`. `create_workflow(templateId)` builds the full workflow:

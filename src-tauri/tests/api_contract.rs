@@ -260,13 +260,15 @@ fn a_workflow_summary_uses_camel_case_and_null_for_never_run() {
         needs_you: 2,
         kinds_needed: vec!["llm".into()],
         status: WorkflowStatus::Ok,
+        has_draft: true,
     };
 
     assert_eq!(
         to_json(&summary),
         json!({
             "id": "w1", "name": "Receipts", "trigger": "File added", "enabled": true,
-            "lastRun": null, "needsYou": 2, "kindsNeeded": ["llm"], "status": "ok"
+            "lastRun": null, "needsYou": 2, "kindsNeeded": ["llm"], "status": "ok",
+            "hasDraft": true
         })
     );
 }
