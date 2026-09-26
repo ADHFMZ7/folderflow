@@ -163,7 +163,7 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
               return !!target && !isTrigger(target.type) && c.source !== c.target;
             }}
             onPaneClick={() => { setSelected(null); setSelectedEdge(null); }}
-            fitView fitViewOptions={{ padding: 0.15, minZoom: 0.9, maxZoom: 1 }}
+            fitView fitViewOptions={{ padding: 0.15, minZoom: 0.6, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={20} />

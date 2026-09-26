@@ -16,8 +16,11 @@ async function openWorkflow(templateId: string | null = "screenshots") {
 
 const canvas = () => screen.getByRole("region", { name: "Canvas" });
 
-/** Selects a step card. A plain click: jsdom's mouse-down has no window, which React Flow's drag code needs. */
-const selectStep = (title: string) => fireEvent.click(within(canvas()).getByText(title));
+/**
+ * Selects a step card once React Flow has drawn it. A plain click: jsdom's
+ * mouse-down has no window, which React Flow's drag code needs.
+ */
+const selectStep = async (title: string) => fireEvent.click(await within(canvas()).findByText(title));
 
 /** jsdom has no layout: place the canvas at x 200-1200, y 0-800. */
 const stubCanvasRect = () => {
@@ -44,7 +47,7 @@ describe("studio", () => {
   it("deletes a step and the links that led to it", async () => {
     const { user, api, wf } = await openWorkflow();
 
-    selectStep("Move to Screenshots");
+    await selectStep("Move to Screenshots");
     await user.click(screen.getByRole("button", { name: "Delete step" }));
 
     await waitFor(async () => {
@@ -57,7 +60,7 @@ describe("studio", () => {
   it("shows problems as the workflow changes, and selects the step they're about", async () => {
     const { user } = await openWorkflow();
 
-    selectStep("When an image lands on the Desktop");
+    await selectStep("When an image lands on the Desktop");
     await user.click(screen.getByRole("button", { name: "Delete step" }));
 
     const problems = await screen.findByRole("list", { name: "Problems" });
@@ -67,7 +70,7 @@ describe("studio", () => {
 
   it("leaves without asking when nothing changed", async () => {
     const { user } = await openWorkflow();
-    selectStep("Move to Screenshots");
+    await selectStep("Move to Screenshots");
 
     await user.click(screen.getByRole("link", { name: "All workflows" }));
 
@@ -142,7 +145,7 @@ describe("studio", () => {
     expect(undo).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Add Notify" }));
-    selectStep("Move to Screenshots");
+    await selectStep("Move to Screenshots");
     await user.click(screen.getByRole("button", { name: "Delete step" }));
 
     await user.click(undo);
@@ -234,7 +237,7 @@ describe("studio", () => {
 
     it("won't apply while there are problems", async () => {
       const { user } = await openRunning();
-      selectStep("When an image lands on the Desktop");
+      await selectStep("When an image lands on the Desktop");
       await user.click(screen.getByRole("button", { name: "Delete step" }));
 
       await waitFor(() => expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled());
