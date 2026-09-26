@@ -1,5 +1,6 @@
-// The Studio editor (layout A of the UX spec): palette on the left, canvas in the
-// middle, inspector on the right. The draft workflow is the only source of truth;
+// The Studio editor (layout A of the UX spec): palette on the left and the canvas
+// beside it. A card floats over the canvas with the selected step's settings, or
+// the problems when asked; with neither, the canvas has the room to itself. The draft workflow is the only source of truth;
 // every canvas event becomes one of the edits in graph.ts.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -8,6 +9,7 @@ import {
   type Connection, type EdgeChange, type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Redo2, Undo2 } from "lucide-react";
 import type { StepType, Workflow } from "../../api/types";
 import { hrefFor } from "../../app/routes";
 import { Button, Dialog, Spinner, TextInput, Toggle } from "../../ui";
@@ -15,11 +17,13 @@ import { addStep, connect, disconnect, isTrigger, moveStep, removeSteps, toFlow,
 import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
 import { StepNode } from "./StepNode";
-import { useEditor } from "./useEditor";
+import { useEditor, type SaveStatus } from "./useEditor";
 import styles from "./Studio.module.css";
 
 const nodeTypes = { step: StepNode };
 const plural = (n: number, word: string) => `${n === 0 ? "No" : n} ${word}${n === 1 ? "" : "s"}`;
+/** How long "Saved" stays up after a save. */
+const SAVED_FLASH_MS = 2000;
 
 export function Studio({ id }: { id: string }) {
   const editor = useEditor(id);
@@ -44,6 +48,7 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
   const rf = useReactFlow();
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  const [showProblems, setShowProblems] = useState(false);
   // React Flow measures each card; it needs those sizes back to show them.
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
 
@@ -67,7 +72,10 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
         const position = c.position;
         edit((w) => moveStep(w, c.id, position), `move:${c.id}`);
       }
-      if (c.type === "select") setSelected((cur) => (c.selected ? c.id : cur === c.id ? null : cur));
+      if (c.type === "select") {
+        setSelected((cur) => (c.selected ? c.id : cur === c.id ? null : cur));
+        if (c.selected) setShowProblems(false);
+      }
       if (c.type === "remove") removed.push(c.id);
     }
     if (removed.length) edit((w) => removeSteps(w, removed));
@@ -111,6 +119,21 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
     add(type, rf.screenToFlowPosition(point));
   }, [add, rf]);
 
+  // The card covers the right of the canvas; slide a newly selected step out from under it.
+  useEffect(() => {
+    if (!selected) return;
+    const frame = requestAnimationFrame(() => {
+      const card = canvasRef.current?.querySelector("aside");
+      const node = canvasRef.current?.querySelector(`.react-flow__node[data-id="${CSS.escape(selected)}"]`);
+      if (!card || !node) return;
+      const overlap = node.getBoundingClientRect().right - card.getBoundingClientRect().left + 24;
+      if (overlap <= 0) return;
+      const { x, y, zoom } = rf.getViewport();
+      rf.setViewport({ x: x - overlap, y, zoom }, { duration: 200 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected, rf]);
+
   const stepTitle = (stepId: string) => draft.steps.find((s) => s.id === stepId)?.title ?? null;
 
   return (
@@ -119,10 +142,20 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
         <a className={styles.back} href={hrefFor({ page: "workflows" })}>All workflows</a>
         <TextInput className={styles.name} aria-label="Workflow name" value={draft.name}
           onChange={(e) => { const name = e.target.value; edit((w: Workflow) => ({ ...w, name }), "name"); }} />
-        <Button variant="secondary" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!past.length}>↶</Button>
-        <Button variant="secondary" aria-label="Redo" title="Redo (⇧⌘Z)" onClick={redo} disabled={!future.length}>↷</Button>
-        <span className={styles.muted}>{save.kind === "saved" ? "All changes saved" : save.kind === "failed" ? "Not saved" : "Saving…"}</span>
-        <span className={problems.length ? styles.problemCount : styles.muted}>{plural(problems.length, "problem")}</span>
+        <span className={styles.history}>
+          <button type="button" className={styles.icon} aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!past.length}>
+            <Undo2 size={17} strokeWidth={1.8} aria-hidden />
+          </button>
+          <button type="button" className={styles.icon} aria-label="Redo" title="Redo (⇧⌘Z)" onClick={redo} disabled={!future.length}>
+            <Redo2 size={17} strokeWidth={1.8} aria-hidden />
+          </button>
+        </span>
+        <SaveIndicator kind={save.kind} />
+        {problems.length > 0 && (
+          <button type="button" className={styles.problemCount} onClick={() => { setSelected(null); setShowProblems(true); }}>
+            {plural(problems.length, "problem")}
+          </button>
+        )}
         <span className={styles.spacer} />
         <Button variant="secondary" disabled title="Trying a workflow on a file comes with the engine that runs workflows.">Try on a file</Button>
         <span title="Turning workflows on comes with the engine that runs them.">
@@ -162,19 +195,22 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
               const target = draft.steps.find((s) => s.id === c.target);
               return !!target && !isTrigger(target.type) && c.source !== c.target;
             }}
-            onPaneClick={() => { setSelected(null); setSelectedEdge(null); }}
+            onPaneClick={() => { setSelected(null); setSelectedEdge(null); setShowProblems(false); }}
             fitView fitViewOptions={{ padding: 0.15, minZoom: 0.6, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={20} />
-            <Controls showInteractive={false} position="bottom-right" />
-            <MiniMap pannable zoomable position="top-right" style={{ width: 140, height: 100 }} />
+            <Controls showInteractive={false} position="bottom-left" />
+            <MiniMap pannable zoomable position="top-left" style={{ width: 140, height: 100 }} />
           </ReactFlow>
+          {(selectedStep || showProblems) && (
+            <Inspector workflow={draft} step={selectedStep} problems={problems} stepTitle={stepTitle}
+              onChange={(step) => edit((w) => updateStep(w, step), `step:${step.id}`)}
+              onDelete={(stepId) => { edit((w) => removeSteps(w, [stepId])); setSelected(null); }}
+              onSelect={(stepId) => { setShowProblems(false); setSelected(stepId); rf.fitView({ nodes: [{ id: stepId }], maxZoom: 1 }); }}
+              onClose={() => { setSelected(null); setShowProblems(false); }} />
+          )}
         </section>
-        <Inspector workflow={draft} step={selectedStep} problems={problems} stepTitle={stepTitle}
-          onChange={(step) => edit((w) => updateStep(w, step), `step:${step.id}`)}
-          onDelete={(stepId) => { edit((w) => removeSteps(w, [stepId])); setSelected(null); }}
-          onSelect={(stepId) => { setSelected(stepId); rf.fitView({ nodes: [{ id: stepId }], duration: 300, maxZoom: 1 }); }} />
       </div>
 
       {leaving.failed && (
@@ -187,6 +223,30 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
         </Dialog>
       )}
     </div>
+  );
+}
+
+/**
+ * Quiet while there's nothing to report: "Saving…" while changes wait to be
+ * saved, "Saved" for a moment after, and "Not saved" until a failed save works.
+ */
+function SaveIndicator({ kind }: { kind: SaveStatus["kind"] }) {
+  const [flash, setFlash] = useState(false);
+  const previous = useRef(kind);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = kind;
+    if (kind !== "saved" || before === "saved") return;
+    setFlash(true);
+    const timer = window.setTimeout(() => setFlash(false), SAVED_FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [kind]);
+
+  const text = kind === "failed" ? "Not saved" : kind !== "saved" ? "Saving…" : flash ? "Saved" : null;
+  return (
+    <span className={kind === "failed" ? styles.notSaved : kind === "saved" ? styles.savedFlash : styles.muted} aria-live="polite">
+      {text}
+    </span>
   );
 }
 
