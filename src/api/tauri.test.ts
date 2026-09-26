@@ -39,6 +39,9 @@ describe("tauri api", () => {
     ["saveDraft", [{ id: "w1" }], "save_draft", { workflow: { id: "w1" } }],
     ["applyDraft", ["w1"], "apply_draft", { id: "w1" }],
     ["discardDraft", ["w1"], "discard_draft", { id: "w1" }],
+    ["chooseFolder", ["~/Documents"], "choose_folder", { start: "~/Documents" }],
+    ["chooseFolder", [], "choose_folder", { start: null }],
+    ["chooseCsv", [], "choose_csv", { start: null }],
   ] as const)("%s invokes %s", async (method, args, cmd, expected) => {
     const calls = recordCalls();
     const api = createTauriApi() as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;

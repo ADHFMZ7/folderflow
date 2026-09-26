@@ -4,4 +4,8 @@ import type { FieldType } from "./FieldType";
 /**
  * A value an `extract` or `agent` step produces.
  */
-export type Field = { name: string, type: FieldType, };
+export type Field = { name: string, type: FieldType, 
+/**
+ * "What to look for". Guidance for the model, never filled in.
+ */
+description?: string, };

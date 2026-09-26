@@ -17,6 +17,8 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `removeConnection(id)` | `remove_connection` | `id` | `Settings` |
 | `listModels(connectionId)` | `list_models` | `connectionId` | `Model[]` |
 | `listTemplates()` | `list_templates` | none | `Template[]` |
+| `chooseFolder(start?)` | `choose_folder` | `start: string \| null` | `string \| null` |
+| `chooseCsv(start?)` | `choose_csv` | `start: string \| null` | `string \| null` |
 
 Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_workflow`, `delete_workflow`, `validate_workflow`) and the workflow file format are in `docs/workflow-format.md`.
 
@@ -40,4 +42,5 @@ Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_wo
   | `io` | Reading or writing a file failed |
   | `conflict` | A save was based on an older revision than the one on disk |
 
+- **Pickers open from Rust.** `choose_folder` and `choose_csv` show the native macOS panel in front of the window (`tauri-plugin-dialog`, used from Rust, so the window needs no dialog permission). They start in `start` when it names an existing folder, or the folder of an existing file, and answer with the chosen path, the home folder written as `~`, or `null` when cancelled. `choose_csv` picks an existing .csv; a new file's path is typed. The mock answers with `MockOptions.chosenFolder` / `chosenCsv` (null is a cancel), or a sample path in previews.
 - **Load notices.** `getSettings` returns `notice: { kind: "recovered", backup }` when the settings file was unreadable and was moved aside, and keeps returning it for the rest of the session, so a second call (React Strict Mode, a remount) can't lose it. Dismissing it only hides it in the UI. A file from a newer version fails with `too_new`, and the UI blocks until the user opens a newer FolderFlow.

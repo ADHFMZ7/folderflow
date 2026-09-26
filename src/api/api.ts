@@ -45,6 +45,11 @@ export interface Api {
   applyDraft(id: string): Promise<SaveResult>;
   /** Moves the draft to the trash. */
   discardDraft(id: string): Promise<void>;
+
+  // Native pickers: a path with the home folder written as ~, or null if cancelled.
+  chooseFolder(start?: string): Promise<string | null>;
+  /** An existing .csv file. A new file's path is typed instead. */
+  chooseCsv(start?: string): Promise<string | null>;
 }
 
 export const ApiContext = createContext<Api | null>(null);

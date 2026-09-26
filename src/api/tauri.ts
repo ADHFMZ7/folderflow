@@ -43,6 +43,8 @@ export function createTauriApi(): Api {
     saveDraft: (workflow) => call("save_draft", { workflow }),
     applyDraft: (id) => call("apply_draft", { id }),
     discardDraft: (id) => call("discard_draft", { id }),
+    chooseFolder: (start) => call("choose_folder", { start: start ?? null }),
+    chooseCsv: (start) => call("choose_csv", { start: start ?? null }),
   };
 }
 

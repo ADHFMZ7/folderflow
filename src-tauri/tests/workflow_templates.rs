@@ -9,12 +9,13 @@ use folderflow_lib::workflow::{
     validate, Every, FieldType, MoveMode, Op, ProblemCode, Step, StepKind, Workflow,
 };
 
-const TEMPLATES: [&str; 5] = [
+const TEMPLATES: [&str; 6] = [
     "receipts",
     "screenshots",
     "summaries",
     "invoices",
     "cleanup",
+    "paperwork",
 ];
 
 fn all_models() -> BTreeSet<String> {
@@ -140,7 +141,7 @@ fn without_models_templates_only_lack_models() {
             "{id}: {problems:?}"
         );
     }
-    let needs_models = ["receipts", "summaries", "invoices"];
+    let needs_models = ["receipts", "summaries", "invoices", "paperwork"];
     for id in needs_models {
         assert!(
             !validate(&template(id), &BTreeSet::new()).is_empty(),
@@ -338,4 +339,66 @@ fn cleanup_reminds_every_friday_evening() {
     );
     assert!(ends(notify));
     assert_eq!(w.steps.len(), 2);
+}
+
+#[test]
+fn paperwork_shows_off_every_step_type_but_the_other_triggers() {
+    let w = template("paperwork");
+    assert_eq!(w.name, "Paperwork inbox");
+    let mut types: Vec<&str> = w.steps.iter().map(|s| s.kind.type_name()).collect();
+    types.sort_unstable();
+    types.dedup();
+    assert_eq!(
+        types,
+        [
+            "addRow",
+            "agent",
+            "askMe",
+            "classify",
+            "createFile",
+            "extract",
+            "fileAdded",
+            "if",
+            "move",
+            "notify",
+            "rename",
+            "stop",
+            "tag",
+            "write"
+        ]
+    );
+}
+
+#[test]
+fn paperwork_guides_its_ai_steps_with_descriptions() {
+    let w = template("paperwork");
+    let classify = w
+        .steps
+        .iter()
+        .find_map(|s| match &s.kind {
+            StepKind::Classify { categories, .. } => Some(categories),
+            _ => None,
+        })
+        .unwrap();
+    let labels: Vec<&str> = classify.iter().map(|c| c.label.as_str()).collect();
+    assert_eq!(labels, ["Receipt", "Invoice", "Contract", "Something else"]);
+    assert!(classify.iter().all(|c| c.description.is_some()));
+
+    for step in &w.steps {
+        if let StepKind::Extract { fields, .. } = &step.kind {
+            assert!(
+                fields.iter().all(|f| f.description.is_some()),
+                "{}",
+                step.title
+            );
+        }
+    }
+    assert!(w.steps.iter().any(|s| matches!(
+        &s.kind,
+        StepKind::AddRow { headers: Some(h), columns, .. } if h.len() == columns.len()
+    )));
+    assert!(w.steps.iter().any(|s| matches!(
+        &s.kind,
+        StepKind::CreateFile { folder: Some(f), .. } if f == "{newFolder}"
+    )));
 }

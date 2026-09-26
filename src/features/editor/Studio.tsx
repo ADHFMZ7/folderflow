@@ -171,7 +171,7 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
             <MiniMap pannable zoomable position="top-right" style={{ width: 140, height: 100 }} />
           </ReactFlow>
         </section>
-        <Inspector step={selectedStep} problems={problems} stepTitle={stepTitle}
+        <Inspector workflow={draft} step={selectedStep} problems={problems} stepTitle={stepTitle}
           onChange={(step) => edit((w) => updateStep(w, step), `step:${step.id}`)}
           onDelete={(stepId) => { edit((w) => removeSteps(w, [stepId])); setSelected(null); }}
           onSelect={(stepId) => { setSelected(stepId); rf.fitView({ nodes: [{ id: stepId }], duration: 300, maxZoom: 1 }); }} />

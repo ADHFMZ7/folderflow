@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 use folderflow_lib::workflow::{
-    validate, Branch, Condition, Every, Field, FieldType, IfMissing, MoveMode, Op, Position,
-    Problem, ProblemCode, Schedule, Step, StepKind, Workflow,
+    validate, Branch, Category, Condition, Every, Field, FieldType, IfMissing, MoveMode, Op,
+    Position, Problem, ProblemCode, Schedule, Step, StepKind, Workflow,
 };
 
 use ProblemCode::*;
@@ -112,7 +112,7 @@ fn classify(id: &str, categories: &[(&str, &str)], branches: &[(&str, &str)]) ->
     step(
         id,
         StepKind::Classify {
-            categories: labels(categories),
+            categories: cats(categories),
             instructions: String::new(),
             branches: pairs(branches),
         },
@@ -139,6 +139,7 @@ fn extract(id: &str, fields: &[&str], to: Option<&str>) -> Step {
                 .map(|name| Field {
                     name: (*name).into(),
                     kind: FieldType::Text,
+                    description: None,
                 })
                 .collect(),
             if_missing: IfMissing::Review,
@@ -151,6 +152,17 @@ fn pairs(pairs: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
     pairs
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+fn cats(items: &[(&str, &str)]) -> Vec<Category> {
+    items
+        .iter()
+        .map(|(id, label)| Category {
+            id: (*id).into(),
+            label: (*label).into(),
+            description: None,
+        })
         .collect()
 }
 
@@ -404,6 +416,7 @@ fn empty_required_fields_are_required() {
             StepKind::AddRow {
                 file: String::new(),
                 columns: vec![],
+                headers: None,
                 next: next(Some("cf")),
             },
         ),
@@ -412,6 +425,7 @@ fn empty_required_fields_are_required() {
             StepKind::CreateFile {
                 name: String::new(),
                 contents: String::new(),
+                folder: None,
                 next: next(Some("ag")),
             },
         ),
@@ -513,6 +527,7 @@ fn a_variable_no_earlier_step_produces_is_unknown() {
             step_id: Some("n".into()),
             code: UnknownVariable,
             message: "{due_date} isn't produced by any step before this one.".into(),
+            field: Some("message".into()),
         }]
     );
 }
@@ -556,6 +571,7 @@ fn each_step_produces_what_the_contract_lists() {
                 outputs: vec![Field {
                     name: "total".into(),
                     kind: FieldType::Number,
+                    description: None,
                 }],
                 next: next(Some("r")),
             },
@@ -648,6 +664,7 @@ fn variables_are_checked_in_every_text_field() {
             StepKind::AddRow {
                 file: "~/{c}.csv".into(),
                 columns: vec!["{d}".into()],
+                headers: None,
                 next: next(Some("cf")),
             },
         ),
@@ -656,6 +673,7 @@ fn variables_are_checked_in_every_text_field() {
             StepKind::CreateFile {
                 name: "{e}".into(),
                 contents: "{f}".into(),
+                folder: None,
                 next: next(Some("g")),
             },
         ),
@@ -703,6 +721,7 @@ fn braces_that_do_not_hold_a_variable_name_are_plain_text() {
             StepKind::CreateFile {
                 name: "notes.json".into(),
                 contents: "{ \"a\": 1 } {} {not a name}".into(),
+                folder: None,
                 next: None,
             },
         ),
@@ -874,10 +893,11 @@ fn a_ten_thousand_step_chain_does_not_overflow_the_stack() {
 #[test]
 fn every_step_pointing_at_every_other_finishes() {
     let n = 200;
-    let categories: Vec<Branch> = (0..n)
-        .map(|i| Branch {
+    let categories: Vec<Category> = (0..n)
+        .map(|i| Category {
             id: format!("b{i}"),
             label: format!("Label {i}"),
+            description: None,
         })
         .collect();
     let exits: std::collections::BTreeMap<String, String> =
@@ -998,4 +1018,194 @@ fn random_graphs_never_panic_or_hang() {
         validate(&wf(steps), &all_models());
     }
     assert!(start.elapsed() < Duration::from_secs(5));
+}
+
+// ---- Step settings (docs/step-settings.md) --------------------------------
+
+fn add_row(id: &str, columns: &[&str], headers: Option<&[&str]>) -> Step {
+    step(
+        id,
+        StepKind::AddRow {
+            file: "~/Expenses.csv".into(),
+            columns: columns.iter().map(|c| c.to_string()).collect(),
+            headers: headers.map(|h| h.iter().map(|c| c.to_string()).collect()),
+            next: None,
+        },
+    )
+}
+
+/// (code, field) for each problem at `id`, in order.
+fn fields_at(workflow: &Workflow, id: &str) -> Vec<(ProblemCode, Option<String>)> {
+    validate(workflow, &all_models())
+        .into_iter()
+        .filter(|p| p.step_id.as_deref() == Some(id))
+        .map(|p| (p.code, p.field))
+        .collect()
+}
+
+fn f(code: ProblemCode, field: &str) -> (ProblemCode, Option<String>) {
+    (code, Some(field.into()))
+}
+
+#[test]
+fn add_row_headings_are_optional_but_must_match_the_columns() {
+    for headers in [None, Some(&["Date", "Amount"][..])] {
+        let w = wf(vec![
+            file_added("t", Some("row")),
+            add_row("row", &["{dateAdded}", "{file}"], headers),
+        ]);
+        assert_eq!(found(&w), [], "{headers:?}");
+    }
+
+    let w = wf(vec![
+        file_added("t", Some("row")),
+        add_row("row", &["{dateAdded}", "{file}"], Some(&["Date"])),
+    ]);
+    assert_eq!(fields_at(&w, "row"), [f(InvalidValue, "headers")]);
+}
+
+#[test]
+fn add_row_headings_are_plain_text_not_variables() {
+    let w = wf(vec![
+        file_added("t", Some("row")),
+        add_row("row", &["{file}"], Some(&["{nope}"])),
+    ]);
+    assert_eq!(found(&w), []);
+}
+
+#[test]
+fn a_create_file_folder_is_checked_for_variables() {
+    let make = |folder: &str| {
+        wf(vec![
+            file_added("t", Some("cf")),
+            step(
+                "cf",
+                StepKind::CreateFile {
+                    name: "notes.md".into(),
+                    contents: String::new(),
+                    folder: Some(folder.into()),
+                    next: None,
+                },
+            ),
+        ])
+    };
+    assert_eq!(found(&make("~/Notes/{year}")), []);
+    assert_eq!(found(&make("")), []);
+    assert_eq!(
+        fields_at(&make("~/Notes/{nope}"), "cf"),
+        [f(UnknownVariable, "folder")]
+    );
+}
+
+#[test]
+fn descriptions_are_guidance_and_never_checked_for_variables() {
+    let mut classify_step = classify("c", &[("c1", "A"), ("c2", "B")], &[]);
+    if let StepKind::Classify { categories, .. } = &mut classify_step.kind {
+        categories[0].description = Some("Mentions {nothing}".into());
+    }
+    let mut extract_step = extract("e", &["amount"], Some("c"));
+    if let StepKind::Extract { fields, .. } = &mut extract_step.kind {
+        fields[0].description = Some("{also_nothing}".into());
+    }
+    let w = wf(vec![
+        file_added("t", Some("e")),
+        extract_step,
+        classify_step,
+    ]);
+    assert_eq!(found(&w), []);
+}
+
+#[test]
+fn field_problems_name_the_field_they_are_about() {
+    let w = wf(vec![
+        step(
+            "t",
+            StepKind::FileAdded {
+                folder: String::new(),
+                file_types: vec!["PDF".into()],
+                subfolders: false,
+                next: next(Some("c")),
+            },
+        ),
+        classify("c", &[("c1", "Receipt"), ("c2", " ")], &[("c1", "e")]),
+        extract("e", &["ok", "bad name", "ok"], Some("w")),
+        write("w", "", Some("i")),
+        step(
+            "i",
+            StepKind::If {
+                condition: Condition {
+                    left: String::new(),
+                    op: Op::Equal,
+                    right: "{missing}".into(),
+                },
+                branches: pairs(&[("yes", "q")]),
+            },
+        ),
+        ask("q", &[("a1", "Yes"), ("a2", "")], &[("a1", "row")]),
+        step(
+            "row",
+            StepKind::AddRow {
+                file: String::new(),
+                columns: vec!["{ok}".into(), "{gone}".into()],
+                headers: None,
+                next: next(Some("m")),
+            },
+        ),
+        step(
+            "m",
+            StepKind::Move {
+                to: "~/{category}/{nope}".into(),
+                mode: MoveMode::Move,
+                next: None,
+            },
+        ),
+    ]);
+
+    assert_eq!(
+        fields_at(&w, "t"),
+        [f(Required, "folder"), f(InvalidValue, "fileTypes.0")]
+    );
+    assert_eq!(fields_at(&w, "c"), [f(Required, "categories.1.label")]);
+    assert_eq!(
+        fields_at(&w, "e"),
+        [
+            f(InvalidValue, "fields.1.name"),
+            f(InvalidValue, "fields.2.name")
+        ]
+    );
+    assert_eq!(fields_at(&w, "w"), [f(Required, "saveAs")]);
+    assert_eq!(
+        fields_at(&w, "i"),
+        [
+            f(Required, "condition.left"),
+            f(UnknownVariable, "condition.right")
+        ]
+    );
+    assert_eq!(fields_at(&w, "q"), [f(Required, "answers.1.label")]);
+    assert_eq!(
+        fields_at(&w, "row"),
+        [f(Required, "file"), f(UnknownVariable, "columns.1")]
+    );
+    assert_eq!(fields_at(&w, "m"), [f(UnknownVariable, "to")]);
+}
+
+#[test]
+fn step_wide_problems_have_no_field() {
+    let w = wf(vec![
+        file_added("t", Some("c")),
+        classify("c", &[("c1", "Only one")], &[]),
+        notify("lost", "Hi.", None),
+    ]);
+    let problems = validate(&w, &no_models());
+    let field_of = |code: ProblemCode| {
+        problems
+            .iter()
+            .find(|p| p.code == code)
+            .unwrap_or_else(|| panic!("no {code:?}"))
+            .field
+            .clone()
+    };
+    assert_eq!(field_of(NoModel), None);
+    assert_eq!(field_of(Unreachable), None);
+    assert_eq!(field_of(Required), Some("categories".into()));
 }

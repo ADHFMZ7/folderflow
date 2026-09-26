@@ -8,4 +8,9 @@ export type Problem = {
 /**
  * `null` for problems with the whole workflow.
  */
-stepId: string | null, code: ProblemCode, message: string, };
+stepId: string | null, code: ProblemCode, message: string, 
+/**
+ * The field the problem is about, as a path into the step's JSON, such as
+ * `"folder"` or `"categories.1.label"`. Missing for step-wide problems.
+ */
+field?: string, };

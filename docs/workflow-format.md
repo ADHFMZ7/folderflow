@@ -47,7 +47,7 @@ Exits live on the step that owns them, so each exit leads to at most one step an
 
 Branches are named by an id that is set once and never changes; the `label` is only display text. Renaming, reordering or fixing a typo in a label never disconnects anything.
 
-- `classify` categories and `askMe` answers are `{ "id": "c1", "label": "Receipt" }`. The editor generates the id (unique within the step) when the branch is added.
+- `classify` categories and `askMe` answers are `{ "id": "c1", "label": "Receipt" }`. The editor generates the id (unique within the step) when the branch is added. A category may also have a `description` ("how to recognise it"), sent to the model with the label.
 - `if` always has exactly two branch ids: `yes` and `no`.
 
 ### Step types
@@ -59,19 +59,21 @@ Values in `{braces}` inside text fields are variables (see below).
 | `fileAdded` | Trigger | `folder` (path), `fileTypes` (lowercase extensions without the dot; empty means any), `subfolders` (bool) | `next` | the file variables |
 | `schedule` | Trigger | `schedule`: `{ "every": "day" \| "weekday" \| "week", "time": "HH:MM", "weekday"?: 0-6 }` (`weekday` only with `week`; 0 is Sunday) | `next` | `{date}`, `{year}` |
 | `runNow` | Trigger | none | `next` | the file variables |
-| `classify` | AI (System 1) | `categories` (at least two), `instructions` (optional hint, may be empty) | `branches` | `{category}` (the chosen label) |
-| `extract` | AI (LLM) | `fields`: `[{ "name", "type": "text" \| "number" \| "date" \| "yesNo" }]` (at least one), `ifMissing`: `"review"` \| `"fail"` | `next` | one variable per field |
+| `classify` | AI (System 1) | `categories`: `[{ "id", "label", "description"? }]` (at least two), `instructions` (optional hint, may be empty) | `branches` | `{category}` (the chosen label) |
+| `extract` | AI (LLM) | `fields`: `[{ "name", "type": "text" \| "number" \| "date" \| "yesNo", "description"? }]` (at least one), `ifMissing`: `"review"` \| `"fail"` | `next` | one variable per field |
 | `write` | AI (LLM) | `instruction`, `saveAs` (variable name) | `next` | `{<saveAs>}` |
 | `agent` | AI (LLM) | `instruction`, `abilities` (e.g. `["readFile"]`), `outputs` (fields, like `extract`) | `next` | one variable per output |
 | `rename` | Action | `template` (new name without extension) | `next` | `{newName}` |
 | `move` | Action | `to` (folder, may use variables), `mode`: `"move"` \| `"copy"` | `next` | `{newFolder}` |
-| `createFile` | Action | `name`, `contents` | `next` | none |
+| `createFile` | Action | `name`, `contents`, `folder`? (where the new file goes; missing or empty means the file's folder) | `next` | none |
 | `tag` | Action | `tags` (at least one) | `next` | none |
-| `addRow` | Action | `file` (path to a .csv), `columns` (one text per column, at least one) | `next` | none |
+| `addRow` | Action | `file` (path to a .csv), `columns` (one text per column, at least one), `headers`? (one heading per column, the first row of a new file) | `next` | none |
 | `notify` | Action | `message` | `next` | none |
 | `if` | Logic | `condition`: `{ "left", "op": ">" \| "<" \| ">=" \| "<=" \| "=" \| "!=" \| "contains" \| "startsWith", "right" }` | `branches` (`yes`, `no`) | none |
 | `stop` | Logic | none | none | none |
 | `askMe` | Human | `question`, `answers` (at least two) | `branches` | `{answer}` (the chosen label) |
+
+Fields marked `?` are optional: a file without them reads as before, and they're only written when set. A `description` on a category or field is guidance for the model ("what to look for"), never filled in, so it isn't checked for variables. `headers` are plain text too.
 
 AI steps don't name a model. Each uses the default model for its kind (Classify: `system1`; Extract, Write, Agent: `llm`).
 
@@ -90,10 +92,10 @@ Names are 1 to 32 characters from `A-Z a-z 0-9 _`, and field names within one st
 Validation returns a list of problems. A workflow with problems can be saved but not turned on.
 
 ```json
-{ "stepId": "s4", "code": "unknown_variable", "message": "{due_date} isn't produced by any step before this one." }
+{ "stepId": "s4", "code": "unknown_variable", "message": "{due_date} isn't produced by any step before this one.", "field": "message" }
 ```
 
-`stepId` is `null` for problems with the whole workflow.
+`stepId` is `null` for problems with the whole workflow. `field`, when present, is the field the problem is about, as a path into the step's JSON: `"folder"`, `"schedule.time"`, `"categories.1.label"`, `"fields.0.name"`, `"columns.2"`, `"condition.left"`. It is missing for problems with a whole step or workflow (`loop`, `unreachable`, `no_model`, `missing_step`, `unknown_branch`, `many_triggers`, a bad or duplicate step id). The editor shows a problem next to its field.
 
 | Code | When |
 | --- | --- |
@@ -107,7 +109,7 @@ Validation returns a list of problems. A workflow with problems can be saved but
 | `required` | A required field is empty, or a list has fewer entries than the table requires |
 | `unknown_variable` | A `{name}` isn't produced by the trigger or by every path of steps before this one |
 | `no_model` | The step's model kind has no default model |
-| `invalid_value` | A value is malformed: a bad variable name, time, weekday or extension |
+| `invalid_value` | A value is malformed: a bad variable name, time, weekday or extension, or Add row `headers` that don't match `columns` one to one |
 
 ## Commands
 
@@ -170,5 +172,6 @@ Rules:
 - `summaries` "Summarise PDFs": File added (Downloads, pdf) → Write "Summarise this document in one paragraph." saveAs `summary` → Create file `{file} summary.txt` with contents `{summary}`.
 - `invoices` "Log invoices": File added (Downloads, pdf) → Extract (vendor, amount, due) → If `{amount}` > 500 → yes: Ask me "Log {vendor} {amount}?" (Log it / Skip) → Log it: Add row; no: Add row. Add row: `~/Documents/Invoices.csv`, columns `{vendor}`, `{amount}`, `{due}`.
 - `cleanup` "Weekly clean-up": Schedule (week, Friday 17:00) → Notify "Time to tidy Downloads."
+- `paperwork` "Paperwork inbox", the showcase: File added (Downloads, pdf png jpg jpeg heic) → Classify (Receipt / Invoice / Contract / Something else, each with a description). Receipt: Extract (date, vendor, amount) → Rename `{date} {vendor} {amount}` → Move `~/Documents/Paperwork/Receipts/{year}` → Add row `Expenses.csv` with headings. Invoice: Extract (vendor, amount, due, number) → If `{amount}` > 1000 → yes: Ask me (File it / Leave it in Downloads → Stop), File it and no both → Rename `{vendor} invoice {number}` → Move → Notify. Contract: Agent (party, endDate, autoRenews, watchOut) → Write summary → Rename `{party} contract` → Move → Create file `{party} contract summary.md` in `{newFolder}` → If `{autoRenews}` = yes → Notify. Something else: Tag "To sort" → Notify. See docs/step-settings.md.
 
 Every template must validate without problems, except `no_model` when no model is connected.

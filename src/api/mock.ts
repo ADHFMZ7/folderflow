@@ -58,7 +58,8 @@ export const TEMPLATES: Template[] = [
   { id: "screenshots", name: "Tidy screenshots", blurb: "Move screenshots off the Desktop into a dated folder", trigger: "File added" },
   { id: "summaries", name: "Summarise PDFs", blurb: "Write a one-paragraph summary next to each new PDF", trigger: "File added" },
   { id: "invoices", name: "Log invoices", blurb: "Add each invoice to a spreadsheet, and ask before big ones", trigger: "File added" },
-  { id: "cleanup", name: "Weekly clean-up", blurb: "Every Friday, archive Downloads files older than 30 days", trigger: "Schedule" },
+  { id: "cleanup", name: "Weekly clean-up", blurb: "Every Friday at 17:00, a reminder to tidy Downloads", trigger: "Schedule" },
+  { id: "paperwork", name: "Paperwork inbox", blurb: "Sort receipts, invoices and contracts from Downloads: rename, file and log them, and ask before big invoices", trigger: "File added" },
 ];
 
 export const FRESH_SETTINGS: Settings = { setupComplete: false, openAtLogin: true, connections: [], defaults: {} };
@@ -79,6 +80,10 @@ export type MockOptions = {
   storedFile?: "damaged" | "tooNew";
   /** Providers that answer with something unreadable, like a server error. */
   faultyProviders?: string[];
+  /** What the folder picker answers; null is a cancel. A sample folder when unset. */
+  chosenFolder?: string | null;
+  /** What the CSV picker answers; null is a cancel. A sample file when unset. */
+  chosenCsv?: string | null;
 };
 
 const SETTINGS_KEY = "folderflow.settings";
@@ -244,6 +249,8 @@ export function createMockApi(options: MockOptions = {}): Api {
       return [...saved, ...(options.damagedWorkflows ?? []).map(damagedSummary)];
     },
     async listTemplates() { return TEMPLATES; },
+    async chooseFolder() { return options.chosenFolder === undefined ? "~/Documents" : options.chosenFolder; },
+    async chooseCsv() { return options.chosenCsv === undefined ? "~/Documents/Log.csv" : options.chosenCsv; },
 
     async getWorkflow(id) { return stored(id); },
 

@@ -75,6 +75,40 @@ fn every_step_type_round_trips_with_the_exact_json() {
     }
 }
 
+/// The optional fields from docs/step-settings.md: category and field
+/// descriptions, Add row headings and Create file's folder.
+#[test]
+fn the_optional_step_fields_round_trip_with_the_exact_json() {
+    let pos = json!({ "x": 0.0, "y": 0.0 });
+    let steps = [
+        json!({ "id": "s1", "type": "classify", "title": "Kind?", "position": pos,
+                "categories": [
+                    { "id": "c1", "label": "Receipt", "description": "Proof of a payment I made" },
+                    { "id": "c2", "label": "Other" }
+                ],
+                "instructions": "", "branches": {} }),
+        json!({ "id": "s2", "type": "extract", "title": "Details", "position": pos,
+                "fields": [
+                    { "name": "amount", "type": "number", "description": "The total, including tax" },
+                    { "name": "vendor", "type": "text" }
+                ],
+                "ifMissing": "review", "next": null }),
+        json!({ "id": "s3", "type": "agent", "title": "Look", "position": pos,
+                "instruction": "Read it.", "abilities": ["readFile"],
+                "outputs": [{ "name": "party", "type": "text", "description": "Who it's with" }], "next": null }),
+        json!({ "id": "s4", "type": "addRow", "title": "Log", "position": pos,
+                "file": "~/Expenses.csv", "columns": ["{vendor}", "{amount}"],
+                "headers": ["Vendor", "Amount"], "next": null }),
+        json!({ "id": "s5", "type": "createFile", "title": "Save", "position": pos,
+                "name": "notes.md", "contents": "Hi", "folder": "~/Documents/Notes", "next": null }),
+    ];
+    for step in steps {
+        let parsed: Step = serde_json::from_value(step.clone())
+            .unwrap_or_else(|e| panic!("couldn't read {step}: {e}"));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), step);
+    }
+}
+
 #[test]
 fn a_whole_workflow_round_trips() {
     let file = workflow_json(every_step_type());
@@ -199,6 +233,7 @@ fn a_problem_has_a_step_id_a_snake_case_code_and_a_message() {
         step_id: Some("s4".into()),
         code: ProblemCode::UnknownVariable,
         message: "{due_date} isn't produced by any step before this one.".into(),
+        field: None,
     };
     assert_eq!(
         serde_json::to_value(&problem).unwrap(),
@@ -230,11 +265,32 @@ fn a_whole_workflow_problem_has_a_null_step_id() {
         step_id: None,
         code: ProblemCode::NoTrigger,
         message: "Add a trigger.".into(),
+        field: None,
     };
     assert_eq!(
         serde_json::to_value(&problem).unwrap()["stepId"],
         Value::Null
     );
+}
+
+#[test]
+fn a_problem_names_its_field_only_when_it_has_one() {
+    let problem = Problem {
+        step_id: Some("s4".into()),
+        code: ProblemCode::Required,
+        message: "Fill in the folder to move to.".into(),
+        field: Some("to".into()),
+    };
+    assert_eq!(
+        serde_json::to_value(&problem).unwrap()["field"],
+        json!("to")
+    );
+
+    let whole = Problem {
+        field: None,
+        ..problem
+    };
+    assert!(serde_json::to_value(&whole).unwrap().get("field").is_none());
 }
 
 #[test]
@@ -283,6 +339,7 @@ fn the_generated_typescript_is_up_to_date() {
     check::<Workflow>(&cfg);
     check::<Step>(&cfg);
     check::<Branch>(&cfg);
+    check::<folderflow_lib::workflow::Category>(&cfg);
     check::<Position>(&cfg);
     check::<Schedule>(&cfg);
     check::<Every>(&cfg);

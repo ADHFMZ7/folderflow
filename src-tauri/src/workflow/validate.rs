@@ -7,9 +7,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
-use super::format::{
-    Branch, Every, Field, Problem, ProblemCode, Schedule, Step, StepKind, Workflow,
-};
+use super::format::{Every, Field, Problem, ProblemCode, Schedule, Step, StepKind, Workflow};
 
 /// The problems with `workflow`, in step order within each kind of check.
 /// `models` holds the model kinds that have a working default model.
@@ -44,14 +42,32 @@ impl Problems {
             step_id: None,
             code,
             message: message.into(),
+            field: None,
         });
     }
 
-    fn at(&mut self, step: &Step, code: ProblemCode, message: impl Into<String>) {
+    fn whole_step(&mut self, step: &Step, code: ProblemCode, message: impl Into<String>) {
         self.0.push(Problem {
             step_id: Some(step.id.clone()),
             code,
             message: message.into(),
+            field: None,
+        });
+    }
+
+    /// A problem with one field of a step, named by its path in the step's JSON.
+    fn at(
+        &mut self,
+        step: &Step,
+        field: impl Into<String>,
+        code: ProblemCode,
+        message: impl Into<String>,
+    ) {
+        self.0.push(Problem {
+            step_id: Some(step.id.clone()),
+            code,
+            message: message.into(),
+            field: Some(field.into()),
         });
     }
 }
@@ -117,7 +133,7 @@ fn check_triggers(workflow: &Workflow, out: &mut Problems) {
         1 => {}
         n => {
             for step in triggers {
-                out.at(
+                out.whole_step(
                     step,
                     ProblemCode::ManyTriggers,
                     format!("A workflow has one trigger, and this one has {n}."),
@@ -131,7 +147,7 @@ fn check_ids(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
     let mut reported: HashSet<&str> = HashSet::new();
     for (i, step) in workflow.steps.iter().enumerate() {
         if !valid_step_id(&step.id) {
-            out.at(
+            out.whole_step(
                 step,
                 ProblemCode::InvalidValue,
                 format!(
@@ -141,29 +157,31 @@ fn check_ids(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
             );
         }
         if !graph.in_graph[i] && reported.insert(step.id.as_str()) {
-            out.at(
+            out.whole_step(
                 step,
                 ProblemCode::DuplicateId,
                 format!("More than one step has the id \"{}\".", step.id),
             );
         }
-        if let Some(branches) = own_branches(&step.kind) {
+        if let Some((list, branches)) = own_branches(&step.kind) {
             let mut seen: HashSet<&str> = HashSet::new();
             let mut dup_reported: HashSet<&str> = HashSet::new();
-            for branch in branches {
-                if branch.id.is_empty() {
+            for (i, (id, label)) in branches.into_iter().enumerate() {
+                if id.is_empty() {
                     out.at(
                         step,
+                        format!("{list}.{i}"),
                         ProblemCode::InvalidValue,
-                        format!("The branch \"{}\" has no id.", branch.label),
+                        format!("The branch \"{label}\" has no id."),
                     );
                     continue;
                 }
-                if !seen.insert(branch.id.as_str()) && dup_reported.insert(branch.id.as_str()) {
+                if !seen.insert(id) && dup_reported.insert(id) {
                     out.at(
                         step,
+                        format!("{list}.{i}"),
                         ProblemCode::DuplicateId,
-                        format!("Two branches of this step share the id \"{}\".", branch.id),
+                        format!("Two branches of this step share the id \"{id}\"."),
                     );
                 }
             }
@@ -171,11 +189,24 @@ fn check_ids(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
     }
 }
 
-/// The branches a step defines itself: categories or answers.
-fn own_branches(kind: &StepKind) -> Option<&[Branch]> {
+/// The branches a step defines itself, as (id, label): its categories or
+/// answers, with the name of the list they're in.
+fn own_branches(kind: &StepKind) -> Option<(&'static str, Vec<(&str, &str)>)> {
     match kind {
-        StepKind::Classify { categories, .. } => Some(categories),
-        StepKind::AskMe { answers, .. } => Some(answers),
+        StepKind::Classify { categories, .. } => Some((
+            "categories",
+            categories
+                .iter()
+                .map(|c| (c.id.as_str(), c.label.as_str()))
+                .collect(),
+        )),
+        StepKind::AskMe { answers, .. } => Some((
+            "answers",
+            answers
+                .iter()
+                .map(|a| (a.id.as_str(), a.label.as_str()))
+                .collect(),
+        )),
         _ => None,
     }
 }
@@ -188,7 +219,7 @@ fn check_exits(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
         }
         for target in step.kind.exits() {
             if !ids.contains(target) {
-                out.at(
+                out.whole_step(
                     step,
                     ProblemCode::MissingStep,
                     format!("This step leads to \"{target}\", which isn't in the workflow."),
@@ -201,14 +232,12 @@ fn check_exits(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
         let known: HashSet<&str> = match &step.kind {
             StepKind::If { .. } => ["yes", "no"].into(),
             kind => own_branches(kind)
-                .unwrap_or_default()
-                .iter()
-                .map(|b| b.id.as_str())
-                .collect(),
+                .map(|(_, branches)| branches.into_iter().map(|(id, _)| id).collect())
+                .unwrap_or_default(),
         };
         for key in branches.keys() {
             if !known.contains(key.as_str()) {
-                out.at(
+                out.whole_step(
                     step,
                     ProblemCode::UnknownBranch,
                     format!("This step has no branch \"{key}\"."),
@@ -219,42 +248,43 @@ fn check_exits(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
 }
 
 fn check_fields(step: &Step, out: &mut Problems) {
-    let mut required = |what: &str| {
-        out.0.push(Problem {
-            step_id: Some(step.id.clone()),
-            code: ProblemCode::Required,
-            message: format!("Fill in {what}."),
-        })
+    let mut required = |field: String, what: &str| {
+        out.at(
+            step,
+            field,
+            ProblemCode::Required,
+            format!("Fill in {what}."),
+        )
     };
     match &step.kind {
         StepKind::FileAdded { folder, .. } => {
             if blank(folder) {
-                required("the folder to watch");
+                required("folder".into(), "the folder to watch");
             }
         }
         StepKind::Schedule { schedule, .. } => {
             if blank(&schedule.time) {
-                required("the time");
+                required("schedule.time".into(), "the time");
             }
             if schedule.every == Every::Week && schedule.weekday.is_none() {
-                required("the day of the week");
+                required("schedule.weekday".into(), "the day of the week");
             }
         }
         StepKind::RunNow { .. } | StepKind::Stop {} => {}
         StepKind::Classify { categories, .. } => {
             if categories.len() < 2 {
-                required("at least two categories");
+                required("categories".into(), "at least two categories");
             }
-            if categories.iter().any(|c| blank(&c.label)) {
-                required("every category's name");
+            if let Some(i) = first_blank(categories.iter().map(|c| c.label.as_str())) {
+                required(format!("categories.{i}.label"), "every category's name");
             }
         }
         StepKind::Extract { fields, .. } => {
             if fields.is_empty() {
-                required("at least one detail to pull out");
+                required("fields".into(), "at least one detail to pull out");
             }
-            if fields.iter().any(|f| blank(&f.name)) {
-                required("every detail's name");
+            if let Some(i) = first_blank(fields.iter().map(|f| f.name.as_str())) {
+                required(format!("fields.{i}.name"), "every detail's name");
             }
         }
         StepKind::Write {
@@ -263,10 +293,10 @@ fn check_fields(step: &Step, out: &mut Problems) {
             ..
         } => {
             if blank(instruction) {
-                required("what to write");
+                required("instruction".into(), "what to write");
             }
             if blank(save_as) {
-                required("the name to save the text as");
+                required("saveAs".into(), "the name to save the text as");
             }
         }
         StepKind::Agent {
@@ -275,61 +305,66 @@ fn check_fields(step: &Step, out: &mut Problems) {
             ..
         } => {
             if blank(instruction) {
-                required("the instruction");
+                required("instruction".into(), "the instruction");
             }
-            if outputs.iter().any(|f| blank(&f.name)) {
-                required("every output's name");
+            if let Some(i) = first_blank(outputs.iter().map(|f| f.name.as_str())) {
+                required(format!("outputs.{i}.name"), "every output's name");
             }
         }
         StepKind::Rename { template, .. } => {
             if blank(template) {
-                required("the new name");
+                required("template".into(), "the new name");
             }
         }
         StepKind::Move { to, .. } => {
             if blank(to) {
-                required("the folder to move to");
+                required("to".into(), "the folder to move to");
             }
         }
         StepKind::CreateFile { name, .. } => {
             if blank(name) {
-                required("the new file's name");
+                required("name".into(), "the new file's name");
             }
         }
         StepKind::Tag { tags, .. } => {
-            if tags.is_empty() || tags.iter().any(|t| blank(t)) {
-                required("at least one tag, and no empty tags");
+            let field = match first_blank(tags.iter().map(String::as_str)) {
+                Some(i) => Some(format!("tags.{i}")),
+                None if tags.is_empty() => Some("tags".into()),
+                None => None,
+            };
+            if let Some(field) = field {
+                required(field, "at least one tag, and no empty tags");
             }
         }
         StepKind::AddRow { file, columns, .. } => {
             if blank(file) {
-                required("the spreadsheet file");
+                required("file".into(), "the spreadsheet file");
             }
             if columns.is_empty() {
-                required("at least one column");
+                required("columns".into(), "at least one column");
             }
         }
         StepKind::Notify { message, .. } => {
             if blank(message) {
-                required("the message");
+                required("message".into(), "the message");
             }
         }
         StepKind::If { condition, .. } => {
             if blank(&condition.left) {
-                required("what to compare");
+                required("condition.left".into(), "what to compare");
             }
         }
         StepKind::AskMe {
             question, answers, ..
         } => {
             if blank(question) {
-                required("the question");
+                required("question".into(), "the question");
             }
             if answers.len() < 2 {
-                required("at least two answers");
+                required("answers".into(), "at least two answers");
             }
-            if answers.iter().any(|a| blank(&a.label)) {
-                required("every answer's text");
+            if let Some(i) = first_blank(answers.iter().map(|a| a.label.as_str())) {
+                required(format!("answers.{i}.label"), "every answer's text");
             }
         }
     }
@@ -341,10 +376,11 @@ fn check_fields(step: &Step, out: &mut Problems) {
 fn check_values(step: &Step, out: &mut Problems) {
     match &step.kind {
         StepKind::FileAdded { file_types, .. } => {
-            for ext in file_types {
+            for (i, ext) in file_types.iter().enumerate() {
                 if !valid_extension(ext) {
                     out.at(
                         step,
+                        format!("fileTypes.{i}"),
                         ProblemCode::InvalidValue,
                         format!(
                             "\"{ext}\" isn't a file type. Use lowercase letters and digits without the dot, like pdf."
@@ -354,13 +390,27 @@ fn check_values(step: &Step, out: &mut Problems) {
             }
         }
         StepKind::Schedule { schedule, .. } => check_schedule(step, schedule, out),
-        StepKind::Extract { fields, .. } => check_field_names(step, fields, out),
-        StepKind::Agent { outputs, .. } => check_field_names(step, outputs, out),
+        StepKind::Extract { fields, .. } => check_field_names(step, "fields", fields, out),
+        StepKind::Agent { outputs, .. } => check_field_names(step, "outputs", outputs, out),
         StepKind::Write { save_as, .. } => {
             if !blank(save_as) && !valid_variable(save_as) {
-                out.at(step, ProblemCode::InvalidValue, bad_name(save_as));
+                out.at(step, "saveAs", ProblemCode::InvalidValue, bad_name(save_as));
             }
         }
+        StepKind::AddRow {
+            columns,
+            headers: Some(headers),
+            ..
+        } if headers.len() != columns.len() => out.at(
+            step,
+            "headers",
+            ProblemCode::InvalidValue,
+            format!(
+                "There are {} headings for {} columns. Give each column one heading.",
+                headers.len(),
+                columns.len()
+            ),
+        ),
         _ => {}
     }
 }
@@ -369,6 +419,7 @@ fn check_schedule(step: &Step, schedule: &Schedule, out: &mut Problems) {
     if !blank(&schedule.time) && !valid_time(&schedule.time) {
         out.at(
             step,
+            "schedule.time",
             ProblemCode::InvalidValue,
             format!(
                 "\"{}\" isn't a time. Use 24-hour HH:MM, like 09:00.",
@@ -379,11 +430,13 @@ fn check_schedule(step: &Step, schedule: &Schedule, out: &mut Problems) {
     match schedule.weekday {
         Some(day) if schedule.every != Every::Week => out.at(
             step,
+            "schedule.weekday",
             ProblemCode::InvalidValue,
             format!("A day of the week ({day}) only goes with a weekly schedule."),
         ),
         Some(day) if day > 6 => out.at(
             step,
+            "schedule.weekday",
             ProblemCode::InvalidValue,
             format!("{day} isn't a day of the week. Use 0 (Sunday) to 6 (Saturday)."),
         ),
@@ -391,17 +444,19 @@ fn check_schedule(step: &Step, schedule: &Schedule, out: &mut Problems) {
     }
 }
 
-fn check_field_names(step: &Step, fields: &[Field], out: &mut Problems) {
+fn check_field_names(step: &Step, list: &str, fields: &[Field], out: &mut Problems) {
     let mut seen: HashSet<&str> = HashSet::new();
-    for field in fields {
+    for (i, field) in fields.iter().enumerate() {
         if blank(&field.name) {
             continue;
         }
+        let path = format!("{list}.{i}.name");
         if !valid_variable(&field.name) {
-            out.at(step, ProblemCode::InvalidValue, bad_name(&field.name));
+            out.at(step, path, ProblemCode::InvalidValue, bad_name(&field.name));
         } else if !seen.insert(field.name.as_str()) {
             out.at(
                 step,
+                path,
                 ProblemCode::InvalidValue,
                 format!("The name \"{}\" is used twice in this step.", field.name),
             );
@@ -422,7 +477,7 @@ fn check_model(step: &Step, models: &BTreeSet<String>, out: &mut Problems) {
             "system1" => "System 1",
             _ => "LLM",
         };
-        out.at(
+        out.whole_step(
             step,
             ProblemCode::NoModel,
             format!("This step needs a default {name} model. Choose one in Settings."),
@@ -493,7 +548,7 @@ fn check_loops(workflow: &Workflow, graph: &Graph, out: &mut Problems) {
         }
         let on_cycle = sizes[component[i]] > 1 || graph.edges[i].contains(&i);
         if on_cycle {
-            out.at(
+            out.whole_step(
                 step,
                 ProblemCode::Loop,
                 "Following this step's exits leads back to it.",
@@ -526,7 +581,7 @@ fn check_reachable(workflow: &Workflow, graph: &Graph, out: &mut Problems) -> Ve
     }
     for (i, step) in workflow.steps.iter().enumerate() {
         if graph.in_graph[i] && !reachable[i] {
-            out.at(
+            out.whole_step(
                 step,
                 ProblemCode::Unreachable,
                 "No path from the trigger reaches this step.",
@@ -585,11 +640,12 @@ fn check_variables(workflow: &Workflow, graph: &Graph, reachable: &[bool], out: 
             continue;
         }
         let mut reported: HashSet<&str> = HashSet::new();
-        for text in texts(&step.kind) {
+        for (field, text) in texts(&step.kind) {
             for name in variables_in(text) {
                 if !available.contains(name) && reported.insert(name) {
                     out.at(
                         step,
+                        field.clone(),
                         ProblemCode::UnknownVariable,
                         format!("{{{name}}} isn't produced by any step before this one."),
                     );
@@ -618,31 +674,53 @@ fn produces(kind: &StepKind) -> Vec<String> {
     }
 }
 
-/// The text fields of a step that may use `{variables}`, in display order.
-fn texts(kind: &StepKind) -> Vec<&str> {
+/// The text fields of a step that may use `{variables}`, in display order,
+/// each with its path in the step's JSON.
+fn texts(kind: &StepKind) -> Vec<(String, &str)> {
+    let mut out: Vec<(String, &str)> = Vec::new();
     match kind {
-        StepKind::FileAdded { folder, .. } => vec![folder.as_str()],
-        StepKind::Classify { instructions, .. } => vec![instructions.as_str()],
+        StepKind::FileAdded { folder, .. } => out.push(("folder".into(), folder)),
+        StepKind::Classify { instructions, .. } => out.push(("instructions".into(), instructions)),
         StepKind::Write { instruction, .. } | StepKind::Agent { instruction, .. } => {
-            vec![instruction.as_str()]
+            out.push(("instruction".into(), instruction))
         }
-        StepKind::Rename { template, .. } => vec![template.as_str()],
-        StepKind::Move { to, .. } => vec![to.as_str()],
-        StepKind::CreateFile { name, contents, .. } => vec![name.as_str(), contents.as_str()],
-        StepKind::Tag { tags, .. } => tags.iter().map(String::as_str).collect(),
-        StepKind::AddRow { file, columns, .. } => std::iter::once(file.as_str())
-            .chain(columns.iter().map(String::as_str))
-            .collect(),
-        StepKind::Notify { message, .. } => vec![message.as_str()],
+        StepKind::Rename { template, .. } => out.push(("template".into(), template)),
+        StepKind::Move { to, .. } => out.push(("to".into(), to)),
+        StepKind::CreateFile {
+            name,
+            folder,
+            contents,
+            ..
+        } => {
+            out.push(("name".into(), name));
+            if let Some(folder) = folder {
+                out.push(("folder".into(), folder));
+            }
+            out.push(("contents".into(), contents));
+        }
+        StepKind::Tag { tags, .. } => {
+            for (i, tag) in tags.iter().enumerate() {
+                out.push((format!("tags.{i}"), tag));
+            }
+        }
+        StepKind::AddRow { file, columns, .. } => {
+            out.push(("file".into(), file));
+            for (i, column) in columns.iter().enumerate() {
+                out.push((format!("columns.{i}"), column));
+            }
+        }
+        StepKind::Notify { message, .. } => out.push(("message".into(), message)),
         StepKind::If { condition, .. } => {
-            vec![condition.left.as_str(), condition.right.as_str()]
+            out.push(("condition.left".into(), &condition.left));
+            out.push(("condition.right".into(), &condition.right));
         }
-        StepKind::AskMe { question, .. } => vec![question.as_str()],
+        StepKind::AskMe { question, .. } => out.push(("question".into(), question)),
         StepKind::Schedule { .. }
         | StepKind::RunNow { .. }
         | StepKind::Extract { .. }
-        | StepKind::Stop {} => Vec::new(),
+        | StepKind::Stop {} => {}
     }
+    out
 }
 
 /// Each `{name}` in `text` whose name is a valid variable name. Other braces
@@ -665,6 +743,11 @@ pub fn variables_in(text: &str) -> Vec<&str> {
         }
     }
     out
+}
+
+/// The index of the first blank text.
+fn first_blank<'a>(items: impl IntoIterator<Item = &'a str>) -> Option<usize> {
+    items.into_iter().position(blank)
 }
 
 fn blank(s: &str) -> bool {
