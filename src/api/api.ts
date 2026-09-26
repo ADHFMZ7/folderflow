@@ -36,6 +36,15 @@ export interface Api {
   /** Moves the workflow's file to the trash. */
   deleteWorkflow(id: string): Promise<void>;
   validateWorkflow(workflow: Workflow): Promise<Problem[]>;
+
+  // Drafts: edits to a workflow that is on wait here until applied. See "Drafts" in docs/workflow-format.md.
+  getDraft(id: string): Promise<Workflow | null>;
+  /** Saves the draft; never touches the running workflow. */
+  saveDraft(workflow: Workflow): Promise<SaveResult>;
+  /** Makes the draft the running workflow, at the next revision. */
+  applyDraft(id: string): Promise<SaveResult>;
+  /** Moves the draft to the trash. */
+  discardDraft(id: string): Promise<void>;
 }
 
 export const ApiContext = createContext<Api | null>(null);

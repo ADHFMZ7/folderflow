@@ -9,7 +9,8 @@ async function openWorkflow(templateId: string | null = "screenshots") {
   const app = renderApp({ settings: { setupComplete: true } });
   const wf = await app.api.createWorkflow(templateId);
   window.location.hash = `#/workflows/${wf.id}`;
-  await screen.findByRole("textbox", { name: "Workflow name" });
+  // Generous: the editor loads React Flow, and a busy machine can be slow.
+  await screen.findByRole("textbox", { name: "Workflow name" }, { timeout: 5000 });
   return { ...app, wf };
 }
 
@@ -32,36 +33,12 @@ describe("studio", () => {
     }
   });
 
-  it("saves changes, and only when there are some", async () => {
-    const { user, api, wf } = await openWorkflow();
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-
-    const name = screen.getByRole("textbox", { name: "Workflow name" });
-    await user.clear(name);
-    await user.type(name, "Screenshots tidy-up");
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument());
-    expect(await api.getWorkflow(wf.id)).toMatchObject({ name: "Screenshots tidy-up", revision: 2 });
-  });
-
-  it("saves with Cmd-S", async () => {
-    const { user, api, wf } = await openWorkflow();
-    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
-
-    await user.keyboard("{Meta>}s{/Meta}");
-
-    await waitFor(async () => expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots!"));
-  });
-
   it("adds a step from the palette", async () => {
     const { user } = await openWorkflow();
 
     await user.click(screen.getByRole("button", { name: "Add Notify" }));
 
     expect(within(canvas()).getByText("Notify me")).toBeInTheDocument();
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
   it("deletes a step and the links that led to it", async () => {
@@ -69,7 +46,6 @@ describe("studio", () => {
 
     selectStep("Move to Screenshots");
     await user.click(screen.getByRole("button", { name: "Delete step" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(async () => {
       const saved = await api.getWorkflow(wf.id);
@@ -87,47 +63,6 @@ describe("studio", () => {
     const problems = await screen.findByRole("list", { name: "Problems" });
     expect(problems).toHaveTextContent("Add a trigger to say when this workflow runs.");
     expect(screen.getByText("1 problem")).toBeInTheDocument();
-  });
-
-  it("explains a save conflict and can load the newer version", async () => {
-    const { user, api, wf } = await openWorkflow();
-    await api.saveWorkflow({ ...wf, name: "Changed elsewhere" });
-
-    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("changed somewhere else");
-    await user.click(screen.getByRole("button", { name: "Load the saved version" }));
-    expect(await screen.findByDisplayValue("Changed elsewhere")).toBeInTheDocument();
-  });
-
-  it("asks in the app, not a native dialog, before leaving with unsaved changes", async () => {
-    const { user, api, wf } = await openWorkflow();
-    const confirm = vi.spyOn(window, "confirm");
-    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
-
-    await user.click(screen.getByRole("link", { name: "All workflows" }));
-    const dialog = await screen.findByRole("dialog", { name: "Leave without saving?" });
-    await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Workflow name" })).toHaveValue("Tidy screenshots!");
-
-    await user.click(screen.getByRole("link", { name: "All workflows" }));
-    await user.click(await screen.findByRole("button", { name: "Leave without saving" }));
-    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
-    expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots");
-    expect(confirm).not.toHaveBeenCalled();
-  });
-
-  it("can save and leave in one go", async () => {
-    const { user, api, wf } = await openWorkflow();
-    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
-
-    await user.click(screen.getByRole("link", { name: "Workflows" }));
-    await user.click(await screen.findByRole("button", { name: "Save and leave" }));
-
-    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
-    expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots!");
   });
 
   it("leaves without asking when nothing changed", async () => {
@@ -151,7 +86,6 @@ describe("studio", () => {
 
     expect(await within(canvas()).findByText("Notify me")).toBeInTheDocument();
     expect(screen.queryByTestId("drag-ghost")).not.toBeInTheDocument();
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
   it("adds nothing when a palette drag ends outside the canvas", async () => {
@@ -164,7 +98,170 @@ describe("studio", () => {
     fireEvent.pointerUp(window, { clientX: 60, clientY: 420 });
 
     expect(within(canvas()).queryByText("Notify me")).not.toBeInTheDocument();
-    expect(screen.getByText("Saved")).toBeInTheDocument();
+  });
+
+  it("saves on its own once edits pause, with no Save button", async () => {
+    const { user, api, wf } = await openWorkflow();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+
+    const name = screen.getByRole("textbox", { name: "Workflow name" });
+    await user.clear(name);
+    await user.type(name, "Screenshots tidy-up");
+
+    await waitFor(async () => expect(await api.getWorkflow(wf.id)).toMatchObject({ name: "Screenshots tidy-up" }));
+    expect(await screen.findByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("saves at once with Cmd-S", async () => {
+    const { user, api, wf } = await openWorkflow();
+    const save = vi.spyOn(api, "saveWorkflow");
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+
+    await user.keyboard("{Meta>}s{/Meta}");
+
+    expect(save).toHaveBeenCalledTimes(1);
+    await waitFor(async () => expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots!"));
+  });
+
+  it("undoes typing in one step, and redoes it", async () => {
+    const { user, api, wf } = await openWorkflow();
+    const name = screen.getByRole("textbox", { name: "Workflow name" });
+    await user.type(name, " v2");
+
+    await user.keyboard("{Meta>}z{/Meta}");
+    expect(name).toHaveValue("Tidy screenshots");
+    await user.keyboard("{Meta>}{Shift>}z{/Shift}{/Meta}");
+    expect(name).toHaveValue("Tidy screenshots v2");
+
+    await waitFor(async () => expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots v2"));
+  });
+
+  it("undoes adding and deleting steps, with the toolbar buttons too", async () => {
+    const { user } = await openWorkflow();
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(undo).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Add Notify" }));
+    selectStep("Move to Screenshots");
+    await user.click(screen.getByRole("button", { name: "Delete step" }));
+
+    await user.click(undo);
+    expect(within(canvas()).getByText("Move to Screenshots")).toBeInTheDocument();
+    await user.click(undo);
+    expect(within(canvas()).queryByText("Notify me")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Redo" }));
+    expect(within(canvas()).getByText("Notify me")).toBeInTheDocument();
+  });
+
+  it("can undo past a save without a false conflict", async () => {
+    const { user, api, wf } = await openWorkflow();
+    const name = screen.getByRole("textbox", { name: "Workflow name" });
+    await user.type(name, "!");
+    await waitFor(async () => expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots!"));
+
+    await user.keyboard("{Meta>}z{/Meta}");
+
+    await waitFor(async () => expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("explains a conflict with a change made elsewhere and can load it", async () => {
+    const { user, api, wf } = await openWorkflow();
+    await api.saveWorkflow({ ...wf, name: "Changed elsewhere" });
+
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("changed somewhere else");
+    await user.click(screen.getByRole("button", { name: "Load the latest version" }));
+    expect(await screen.findByDisplayValue("Changed elsewhere")).toBeInTheDocument();
+  });
+
+  it("finishes saving before leaving, without asking", async () => {
+    const { user, api, wf } = await openWorkflow();
+    const confirm = vi.spyOn(window, "confirm");
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+
+    await user.click(screen.getByRole("link", { name: "All workflows" }));
+
+    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
+    expect((await api.getWorkflow(wf.id)).name).toBe("Tidy screenshots!");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("asks before leaving if the last changes couldn't be saved", async () => {
+    const { user, api } = await openWorkflow();
+    api.saveWorkflow = () => Promise.reject(new Error("The disk is full."));
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+
+    await user.click(screen.getByRole("link", { name: "All workflows" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Your last changes aren't saved" });
+    expect(dialog).toHaveTextContent("The disk is full.");
+    await user.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByRole("textbox", { name: "Workflow name" })).toHaveValue("Tidy screenshots!");
+  });
+
+  describe("a workflow that is on", () => {
+    async function openRunning() {
+      const app = renderApp({ settings: { setupComplete: true } });
+      const created = await app.api.createWorkflow("screenshots");
+      const { workflow: live } = await app.api.saveWorkflow({ ...created, enabled: true });
+      window.location.hash = `#/workflows/${live.id}`;
+      await screen.findByRole("textbox", { name: "Workflow name" }, { timeout: 5000 });
+      return { ...app, live };
+    }
+
+    it("saves edits to a draft and keeps the running version", async () => {
+      const { user, api, live } = await openRunning();
+
+      await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " v2");
+
+      expect(await screen.findByRole("status", { name: "Changes not live" })).toHaveTextContent("aren't live yet");
+      await waitFor(async () => expect((await api.getDraft(live.id))?.name).toBe("Tidy screenshots v2"));
+      expect(await api.getWorkflow(live.id)).toEqual(live);
+    });
+
+    it("applies the draft to make it live", async () => {
+      const { user, api, live } = await openRunning();
+      await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " v2");
+      await waitFor(async () => expect(await api.getDraft(live.id)).not.toBeNull());
+
+      await user.click(screen.getByRole("button", { name: "Apply" }));
+
+      await waitFor(async () => expect(await api.getWorkflow(live.id)).toMatchObject({ name: "Tidy screenshots v2", revision: live.revision + 1 }));
+      expect(screen.queryByRole("status", { name: "Changes not live" })).not.toBeInTheDocument();
+    });
+
+    it("won't apply while there are problems", async () => {
+      const { user } = await openRunning();
+      selectStep("When an image lands on the Desktop");
+      await user.click(screen.getByRole("button", { name: "Delete step" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled());
+    });
+
+    it("discards the draft and goes back to the running version", async () => {
+      const { user, api, live } = await openRunning();
+      await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " v2");
+      await waitFor(async () => expect(await api.getDraft(live.id)).not.toBeNull());
+
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      expect(await screen.findByDisplayValue("Tidy screenshots")).toBeInTheDocument();
+      await waitFor(async () => expect(await api.getDraft(live.id)).toBeNull());
+    });
+
+    it("opens with the waiting draft when there is one", async () => {
+      const app = renderApp({ settings: { setupComplete: true } });
+      const created = await app.api.createWorkflow("screenshots");
+      const { workflow: live } = await app.api.saveWorkflow({ ...created, enabled: true });
+      await app.api.saveDraft({ ...live, name: "Waiting" });
+
+      window.location.hash = `#/workflows/${live.id}`;
+
+      expect(await screen.findByDisplayValue("Waiting")).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Changes not live" })).toBeInTheDocument();
+    });
   });
 
   it("says why trying and turning on aren't available yet", async () => {
