@@ -268,3 +268,59 @@ describe("pickers", () => {
     expect(await api().chooseCsv()).toBe("~/Documents/Log.csv");
   });
 });
+
+describe("drafts", () => {
+  /** A workflow that is on: its edits go to a draft. */
+  async function running() {
+    const a = api();
+    const wf = await a.createWorkflow("screenshots");
+    const { workflow } = await a.saveWorkflow({ ...wf, enabled: true });
+    return { a, live: workflow };
+  }
+
+  it("saves a draft without touching the running workflow", async () => {
+    const { a, live } = await running();
+
+    const { workflow: draft } = await a.saveDraft({ ...live, name: "v2" });
+
+    expect(draft).toMatchObject({ name: "v2", revision: live.revision, enabled: true });
+    expect(await a.getWorkflow(live.id)).toEqual(live);
+    expect(await a.getDraft(live.id)).toEqual(draft);
+    expect((await a.listWorkflows())[0].hasDraft).toBe(true);
+  });
+
+  it("applies a draft as the next revision and removes it", async () => {
+    const { a, live } = await running();
+    await a.saveDraft({ ...live, name: "v2" });
+
+    const { workflow } = await a.applyDraft(live.id);
+
+    expect(workflow).toMatchObject({ name: "v2", revision: live.revision + 1 });
+    expect(await a.getDraft(live.id)).toBeNull();
+    expect((await a.listWorkflows())[0].hasDraft).toBe(false);
+  });
+
+  it("won't apply a draft with problems to a running workflow", async () => {
+    const { a, live } = await running();
+    await a.saveDraft({ ...live, steps: [] });
+
+    await expect(a.applyDraft(live.id)).rejects.toMatchObject({ code: "invalid" });
+    expect(await a.getWorkflow(live.id)).toEqual(live);
+  });
+
+  it("refuses a draft based on another revision, and applying with none", async () => {
+    const { a, live } = await running();
+    await expect(a.saveDraft({ ...live, revision: 99 })).rejects.toMatchObject({ code: "conflict" });
+    await expect(a.applyDraft(live.id)).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("discards a draft", async () => {
+    const { a, live } = await running();
+    await a.saveDraft({ ...live, name: "never mind" });
+
+    await a.discardDraft(live.id);
+    await a.discardDraft(live.id);
+
+    expect(await a.getDraft(live.id)).toBeNull();
+  });
+});

@@ -37,9 +37,18 @@ export interface Api {
   deleteWorkflow(id: string): Promise<void>;
   validateWorkflow(workflow: Workflow): Promise<Problem[]>;
 
+  // Drafts: edits to a workflow that is on wait here until applied. See "Drafts" in docs/workflow-format.md.
+  getDraft(id: string): Promise<Workflow | null>;
+  /** Saves the draft; never touches the running workflow. */
+  saveDraft(workflow: Workflow): Promise<SaveResult>;
+  /** Makes the draft the running workflow, at the next revision. */
+  applyDraft(id: string): Promise<SaveResult>;
+  /** Moves the draft to the trash. */
+  discardDraft(id: string): Promise<void>;
+
   // Native pickers: a path with the home folder written as ~, or null if cancelled.
   chooseFolder(start?: string): Promise<string | null>;
-  /** A new or existing .csv file. */
+  /** An existing .csv file. A new file's path is typed instead. */
   chooseCsv(start?: string): Promise<string | null>;
 }
 

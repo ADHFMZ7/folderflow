@@ -39,16 +39,16 @@ export function Studio({ id }: { id: string }) {
 
 type Ready = Extract<ReturnType<typeof useEditor>["state"], { status: "ready" }>;
 
-function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>, "state"> & { state: Ready }) {
-  const { draft, problems, dirty, saving, saveError } = state;
+function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit<ReturnType<typeof useEditor>, "state"> & { state: Ready }) {
+  const { draft, problems, save, pendingApply, past, future } = state;
   const rf = useReactFlow();
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   // React Flow measures each card; it needs those sizes back to show them.
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
 
-  const leaving = useUnsavedGuard(dirty);
-  useSaveShortcut(save);
+  const leaving = useLeaveGuard(save.kind, flush);
+  useShortcuts({ save: flush, undo, redo });
   const canvasRef = useRef<HTMLElement>(null);
 
   const flow = useMemo(() => toFlow(draft, problems), [draft, problems]);
@@ -65,7 +65,7 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
       }
       if (c.type === "position" && c.position) {
         const position = c.position;
-        edit((w) => moveStep(w, c.id, position));
+        edit((w) => moveStep(w, c.id, position), `move:${c.id}`);
       }
       if (c.type === "select") setSelected((cur) => (c.selected ? c.id : cur === c.id ? null : cur));
       if (c.type === "remove") removed.push(c.id);
@@ -118,25 +118,37 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
       <header className={styles.toolbar}>
         <a className={styles.back} href={hrefFor({ page: "workflows" })}>All workflows</a>
         <TextInput className={styles.name} aria-label="Workflow name" value={draft.name}
-          onChange={(e) => { const name = e.target.value; edit((w: Workflow) => ({ ...w, name })); }} />
-        <span className={dirty ? styles.unsaved : styles.saved}>{dirty ? "Unsaved changes" : "Saved"}</span>
+          onChange={(e) => { const name = e.target.value; edit((w: Workflow) => ({ ...w, name }), "name"); }} />
+        <Button variant="secondary" aria-label="Undo" title="Undo (⌘Z)" onClick={undo} disabled={!past.length}>↶</Button>
+        <Button variant="secondary" aria-label="Redo" title="Redo (⇧⌘Z)" onClick={redo} disabled={!future.length}>↷</Button>
+        <span className={styles.muted}>{save.kind === "saved" ? "All changes saved" : save.kind === "failed" ? "Not saved" : "Saving…"}</span>
         <span className={problems.length ? styles.problemCount : styles.muted}>{plural(problems.length, "problem")}</span>
         <span className={styles.spacer} />
         <Button variant="secondary" disabled title="Trying a workflow on a file comes with the engine that runs workflows.">Try on a file</Button>
         <span title="Turning workflows on comes with the engine that runs them.">
           <Toggle label="On" checked={draft.enabled} onChange={() => {}} disabled />
         </span>
-        <Button onClick={save} disabled={!dirty || saving}>{saving ? "Saving…" : "Save"}</Button>
       </header>
 
-      {saveError && (
+      {save.kind === "failed" && (
         <div className={styles.alert} role="alert">
           <span>
-            {saveError.conflict
-              ? "This workflow was changed somewhere else since you opened it, so your changes weren't saved."
-              : `Couldn't save: ${saveError.message}`}
+            {save.conflict
+              ? "This workflow was changed somewhere else since you opened it, so your latest changes weren't saved."
+              : `Couldn't save your changes: ${save.message}`}
           </span>
-          {saveError.conflict && <Button variant="secondary" onClick={reload}>Load the saved version</Button>}
+          {save.conflict
+            ? <Button variant="secondary" onClick={reload}>Load the latest version</Button>
+            : <Button variant="secondary" onClick={() => flush()}>Try again</Button>}
+        </div>
+      )}
+
+      {pendingApply && (
+        <div className={styles.draftBar} role="status" aria-label="Changes not live">
+          <span>You have changes that aren't live yet. The running version stays as it is until you apply them.</span>
+          <Button variant="secondary" onClick={discard}>Discard changes</Button>
+          <Button onClick={apply} disabled={problems.length > 0}
+            title={problems.length ? `Fix ${plural(problems.length, "problem").toLowerCase()} first` : undefined}>Apply</Button>
         </div>
       )}
 
@@ -151,7 +163,7 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
               return !!target && !isTrigger(target.type) && c.source !== c.target;
             }}
             onPaneClick={() => { setSelected(null); setSelectedEdge(null); }}
-            fitView fitViewOptions={{ padding: 0.15, minZoom: 0.9, maxZoom: 1 }}
+            fitView fitViewOptions={{ padding: 0.15, minZoom: 0.6, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={20} />
@@ -160,19 +172,18 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
           </ReactFlow>
         </section>
         <Inspector workflow={draft} step={selectedStep} problems={problems} stepTitle={stepTitle}
-          onChange={(step) => edit((w) => updateStep(w, step))}
+          onChange={(step) => edit((w) => updateStep(w, step), `step:${step.id}`)}
           onDelete={(stepId) => { edit((w) => removeSteps(w, [stepId])); setSelected(null); }}
           onSelect={(stepId) => { setSelected(stepId); rf.fitView({ nodes: [{ id: stepId }], duration: 300, maxZoom: 1 }); }} />
       </div>
 
-      {leaving.to && (
-        <Dialog title="Leave without saving?" onClose={leaving.stay}
+      {leaving.failed && (
+        <Dialog title="Your last changes aren't saved" onClose={leaving.stay}
           actions={<>
             <Button variant="secondary" onClick={leaving.stay}>Keep editing</Button>
-            <Button variant="danger" onClick={leaving.go}>Leave without saving</Button>
-            <Button onClick={async () => { if (await save()) leaving.go(); else leaving.stay(); }}>Save and leave</Button>
+            <Button variant="danger" onClick={leaving.go}>Leave anyway</Button>
           </>}>
-          <p>Your changes to “{draft.name}” haven't been saved.</p>
+          <p>{save.kind === "failed" ? save.message : "Saving didn't finish."} If you leave now, those changes are lost.</p>
         </Dialog>
       )}
     </div>
@@ -180,21 +191,25 @@ function Editor({ state, edit, save, reload }: Omit<ReturnType<typeof useEditor>
 }
 
 /**
- * Holds in-app navigation while there are unsaved changes, so the editor can ask
- * first. Asking happens in the app: native confirm dialogs don't show in Tauri's
- * macOS window, where they silently answer "no".
+ * Holds in-app navigation until pending changes are saved. Only if saving fails
+ * does it ask, in the app: native confirm dialogs don't show in Tauri's macOS
+ * window, where they silently answer "no".
  */
-function useUnsavedGuard(dirty: boolean) {
-  const [to, setTo] = useState<string | null>(null);
+function useLeaveGuard(saveKind: string, flush: () => Promise<boolean>) {
+  const [held, setHeld] = useState<{ to: string; failed: boolean } | null>(null);
 
   useEffect(() => {
-    if (!dirty) return;
+    if (saveKind === "saved") return;
     const onClick = (e: MouseEvent) => {
       const link = (e.target as Element | null)?.closest?.("a[href^='#/']");
       if (!link) return;
       e.preventDefault();
       e.stopPropagation();
-      setTo(link.getAttribute("href"));
+      const to = link.getAttribute("href")!;
+      setHeld({ to, failed: false });
+      flush().then((ok) => {
+        if (ok) { window.location.hash = to; setHeld(null); } else setHeld({ to, failed: true });
+      });
     };
     // Closing the window in a browser; Tauri's window doesn't ask.
     const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -204,26 +219,28 @@ function useUnsavedGuard(dirty: boolean) {
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("beforeunload", onUnload);
     };
-  }, [dirty]);
+  }, [saveKind, flush]);
 
-  const stay = useCallback(() => setTo(null), []);
+  const stay = useCallback(() => setHeld(null), []);
   const go = useCallback(() => {
-    if (to) window.location.hash = to;
-    setTo(null);
-  }, [to]);
-  return { to, stay, go };
+    if (held) window.location.hash = held.to;
+    setHeld(null);
+  }, [held]);
+  return { failed: !!held?.failed, stay, go };
 }
 
-/** Cmd-S (Ctrl-S elsewhere) saves. */
-function useSaveShortcut(save: () => unknown) {
-  const latest = useRef(save);
-  latest.current = save;
+/** ⌘S saves now, ⌘Z undoes, ⇧⌘Z (or ⌘Y) redoes; Ctrl on other systems. */
+function useShortcuts(actions: { save: () => unknown; undo: () => void; redo: () => void }) {
+  const latest = useRef(actions);
+  latest.current = actions;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        latest.current();
-      }
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === "s") { e.preventDefault(); latest.current.save(); }
+      else if (key === "z" && e.shiftKey) { e.preventDefault(); latest.current.redo(); }
+      else if (key === "z") { e.preventDefault(); latest.current.undo(); }
+      else if (key === "y") { e.preventDefault(); latest.current.redo(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
