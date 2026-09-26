@@ -17,6 +17,18 @@
   --warn: #a8660b;
   --danger: #c0283a;
 
+  /* Window surfaces (the Sheet style): the title bar area and sidebar share one
+     tone, and each page sits on a raised sheet. Separation comes from tone and
+     hairlines, not borders. */
+  --chrome: #e4e8ee;
+  --sheet: #fbfcfd;
+  --card: #f3f5f8;
+  --hairline: color-mix(in srgb, var(--line) 55%, transparent);
+  --select: color-mix(in srgb, var(--text) 7%, transparent);
+  /* The macOS traffic lights sit over the top-left corner (overlay title bar). */
+  --titlebar-height: 44px;
+  --traffic-lights-width: 52px;
+
   --kind-trigger: #1f47d6;
   --kind-ai: #6b3fc4;
   --kind-action: #1d7a55;
@@ -62,6 +74,10 @@
     --ok: #4fbf8e;
     --warn: #e2a24a;
     --danger: #f06a7a;
+
+    --chrome: #0b0e14;
+    --sheet: #161b24;
+    --card: #1c2230;
 
     --kind-trigger: #6f8dff;
     --kind-ai: #a384f0;

@@ -1,55 +1,55 @@
+import { History, LayoutTemplate, PanelLeft, Settings, Workflow, type LucideIcon } from "lucide-react";
 import { hrefFor, type Page } from "../../app/routes";
 import { Badge } from "../../ui";
 import { ModelReadiness } from "../models/ModelReadiness";
 import styles from "./Sidebar.module.css";
 
-const ITEMS: { page: Page; label: string }[] = [
-  { page: "workflows", label: "Workflows" },
-  { page: "history", label: "History" },
-  { page: "templates", label: "Templates" },
-  { page: "settings", label: "Settings" },
+const ITEMS: { page: Page; label: string; icon: LucideIcon }[] = [
+  { page: "workflows", label: "Workflows", icon: Workflow },
+  { page: "history", label: "History", icon: History },
+  { page: "templates", label: "Templates", icon: LayoutTemplate },
+  { page: "settings", label: "Settings", icon: Settings },
 ];
 
 type Props = { current: Page; needsYou: number; collapsed: boolean; onToggle: () => void };
 
 /**
- * The page list. Collapsed, it shrinks to a rail with just the menu button and
- * the needs-you count; its links are removed, so Tab never lands on hidden ones.
+ * The page list, on the window's chrome. Its top row leaves room for the macOS
+ * traffic lights and moves the window when dragged. Collapsed, it's a rail of
+ * icons whose links keep their names for screen readers and tooltips.
  */
 export function Sidebar({ current, needsYou, collapsed, onToggle }: Props) {
+  const needsLabel = `${needsYou} workflow${needsYou === 1 ? "" : "s"} needs you`;
   return (
     <nav className={collapsed ? styles.rail : styles.sidebar} aria-label="Main">
-      <button type="button" className={styles.menu} onClick={onToggle}
-        aria-expanded={!collapsed} aria-controls="sidebar-pages" aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
-        title={collapsed ? "Show sidebar" : "Hide sidebar"}>
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-          <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </button>
+      <div className={styles.top} data-tauri-drag-region>
+        <span className={styles.lights} aria-hidden />
+        <button type="button" className={styles.menu} onClick={onToggle}
+          aria-expanded={!collapsed} aria-controls="sidebar-pages" aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
+          title={collapsed ? "Show sidebar" : "Hide sidebar"}>
+          <PanelLeft size={17} strokeWidth={1.7} aria-hidden />
+        </button>
+      </div>
 
-      {collapsed ? (
-        needsYou > 0 && (
-          <span className={styles.railBadge} aria-label={`${needsYou} workflow${needsYou === 1 ? "" : "s"} needs you`}>
-            <Badge tone="danger">{needsYou}</Badge>
-          </span>
-        )
-      ) : (
-        <>
-          <ul id="sidebar-pages" className={styles.items}>
-            {ITEMS.map((item) => (
-              <li key={item.page}>
-                <a href={hrefFor({ page: item.page })} className={item.page === current ? styles.current : styles.item}
-                  aria-current={item.page === current ? "page" : undefined}>
-                  {item.label}
-                  {item.page === "workflows" && needsYou > 0 && <Badge tone="danger">{needsYou}</Badge>}
-                </a>
-              </li>
-            ))}
-          </ul>
-          <span className={styles.spacer} />
-          <ModelReadiness />
-        </>
-      )}
+      <ul id="sidebar-pages" className={styles.items}>
+        {ITEMS.map(({ page, label, icon: Icon }) => (
+          <li key={page}>
+            <a href={hrefFor({ page })} className={page === current ? styles.current : styles.item}
+              aria-current={page === current ? "page" : undefined}
+              aria-label={collapsed ? label : undefined} title={collapsed ? label : undefined}>
+              <Icon size={17} strokeWidth={1.7} aria-hidden className={styles.icon} />
+              {!collapsed && <span className={styles.label}>{label}</span>}
+              {page === "workflows" && needsYou > 0 && (
+                collapsed
+                  ? <span className={styles.dot} aria-label={needsLabel}>{needsYou}</span>
+                  : <Badge tone="danger">{needsYou}</Badge>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <span className={styles.spacer} />
+      {!collapsed && <div className={styles.readiness}><ModelReadiness /></div>}
     </nav>
   );
 }

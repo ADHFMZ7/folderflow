@@ -115,7 +115,7 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
 
   return (
     <div className={styles.studio}>
-      <header className={styles.toolbar}>
+      <header className={styles.toolbar} data-tauri-drag-region>
         <a className={styles.back} href={hrefFor({ page: "workflows" })}>All workflows</a>
         <TextInput className={styles.name} aria-label="Workflow name" value={draft.name}
           onChange={(e) => { const name = e.target.value; edit((w: Workflow) => ({ ...w, name }), "name"); }} />

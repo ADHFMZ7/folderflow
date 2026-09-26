@@ -273,3 +273,10 @@ describe("studio", () => {
     expect(screen.getByRole("switch", { name: "On" })).toBeDisabled();
   });
 });
+
+describe("window", () => {
+  it("can be moved by the editor's toolbar, since the title bar is hidden", async () => {
+    await openWorkflow();
+    expect(screen.getByRole("textbox", { name: "Workflow name" }).closest("header")).toHaveAttribute("data-tauri-drag-region");
+  });
+});

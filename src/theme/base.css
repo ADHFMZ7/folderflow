@@ -7,7 +7,7 @@ html, body, #root { height: 100%; margin: 0; }
 body {
   font: var(--fs)/1.45 var(--font);
   color: var(--text);
-  background: var(--bg);
+  background: var(--chrome);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -19,3 +19,7 @@ p { margin: 0; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* With the overlay title bar, a strip across the top lets screens without their
+   own top bar be dragged to move the window. */
+.window-drag-strip { position: fixed; inset: 0 0 auto; height: 28px; z-index: 0; }

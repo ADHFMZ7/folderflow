@@ -1,7 +1,7 @@
 .backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: var(--space-4); background: rgb(0 0 0 / 0.3); }
 .dialog {
   width: min(520px, 100%); display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5);
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: 0 18px 50px rgb(0 0 0 / 0.3);
+  background: var(--sheet); border: 1px solid var(--hairline); border-radius: 14px; box-shadow: 0 18px 50px rgb(0 0 0 / 0.3);
 }
 .title { font-size: var(--fs-lg); }
 .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
