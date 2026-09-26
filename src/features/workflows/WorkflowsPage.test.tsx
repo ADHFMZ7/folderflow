@@ -10,7 +10,7 @@ describe("workflows home", () => {
 
     await user.click(await screen.findByRole("button", { name: "+ New workflow" }));
 
-    expect(await screen.findByRole("heading", { name: "New workflow" })).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Workflow name" })).toHaveValue("New workflow");
     const [created] = await api.listWorkflows();
     expect(window.location.hash).toBe(`#/workflows/${created.id}`);
   });
@@ -20,7 +20,7 @@ describe("workflows home", () => {
 
     await user.click(await screen.findByRole("button", { name: /Sort receipts/ }));
 
-    expect(await screen.findByRole("heading", { name: "Sort receipts" })).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Workflow name" })).toHaveValue("Sort receipts");
   });
 
   it("lists saved workflows and opens one", async () => {
@@ -29,7 +29,7 @@ describe("workflows home", () => {
 
     await user.click(await screen.findByRole("link", { name: /Tidy screenshots/ }));
 
-    expect(await screen.findByRole("heading", { name: "Tidy screenshots" })).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Workflow name" })).toHaveValue("Tidy screenshots");
     expect(window.location.hash).toBe(`#/workflows/${wf.id}`);
   });
 

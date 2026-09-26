@@ -4,7 +4,7 @@ import { useRoute } from "../../app/routes";
 import { HistoryPage } from "../history/HistoryPage";
 import { SettingsPage } from "../settings-page/SettingsPage";
 import { TemplatesPage } from "../workflows/TemplatesPage";
-import { WorkflowPage } from "../workflows/WorkflowPage";
+import { Studio } from "../editor/Studio";
 import { WorkflowsPage } from "../workflows/WorkflowsPage";
 import { useWorkflows } from "../workflows/useWorkflows";
 import { Sidebar } from "./Sidebar";
@@ -18,15 +18,19 @@ export function MainWindow() {
   return (
     <div className={styles.window}>
       <Sidebar current={route.page === "workflow" ? "workflows" : route.page} needsYou={needsYou} />
+      {route.page === "workflow" ? (
+        // The editor takes the whole area, with no page padding or scrolling of its own.
+        <main className={styles.editor}><Studio key={route.id} id={route.id} /></main>
+      ) : (
       <main className={styles.page}>
         <div className={styles.content}>
           {route.page === "workflows" && <WorkflowsPage {...workflows} />}
-          {route.page === "workflow" && <WorkflowPage key={route.id} id={route.id} />}
           {route.page === "history" && <HistoryPage />}
           {route.page === "templates" && <TemplatesPage templates={workflows.templates} onUse={workflows.create} />}
           {route.page === "settings" && <SettingsPage />}
         </div>
       </main>
+      )}
     </div>
   );
 }

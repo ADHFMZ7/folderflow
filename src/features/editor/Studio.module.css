@@ -1,0 +1,70 @@
+.studio { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.center { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6); }
+.toolbar {
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4);
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.back { color: var(--accent); font-weight: 550; text-decoration: none; white-space: nowrap; }
+.back::before { content: "← "; }
+.name { width: 280px; font-weight: 650; }
+.unsaved { color: var(--warn); font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; }
+.saved, .muted { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+.note { color: var(--muted); font-size: var(--fs-sm); }
+.problemCount { color: var(--danger); font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; }
+.spacer { flex: 1; }
+.alert {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-4);
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
+
+/* palette */
+.palette { overflow: auto; padding: var(--space-2) var(--space-3) var(--space-5); background: var(--panel-2); border-right: 1px solid var(--line); }
+.paletteTitle { margin: var(--space-3) 0 var(--space-1); font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: var(--tracking-label); }
+.paletteItem {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: 6px var(--space-2); border: 0; border-radius: var(--radius-sm);
+  background: transparent; text-align: left; cursor: grab;
+}
+.paletteItem:hover { background: var(--panel); }
+.hint { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-3); }
+
+/* canvas */
+.canvas { position: relative; min-width: 0; }
+.canvas :global(.react-flow) { --xy-background-color: var(--bg); --xy-edge-stroke: var(--muted); --xy-controls-button-background-color: var(--panel); --xy-controls-button-color: var(--text); --xy-minimap-background-color: var(--panel); --xy-minimap-mask-background-color: rgb(128 128 128 / 0.2); }
+.canvas :global(.react-flow__edge-text) { fill: var(--muted); font-size: 12px; }
+.canvas :global(.react-flow__edge-textbg) { fill: var(--bg); }
+.canvas :global(.react-flow__edge.selected path) { stroke: var(--accent); stroke-width: 2; }
+.canvas :global(.react-flow__handle) { width: 10px; height: 10px; background: var(--panel); border: 2px solid var(--muted); }
+
+.kind-trigger { --k: var(--kind-trigger); }
+.kind-ai { --k: var(--kind-ai); }
+.kind-action { --k: var(--kind-action); }
+.kind-logic { --k: var(--kind-logic); }
+.kind-human { --k: var(--kind-human); }
+.glyph {
+  display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 3px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); font-size: var(--fs-xs); font-weight: 700;
+}
+.node {
+  width: 260px; padding: var(--space-2) var(--space-3) var(--space-3); background: var(--panel);
+  border: 1px solid var(--line); border-top: 4px solid var(--k); border-radius: var(--radius);
+}
+.selected { outline: 2px solid var(--accent); }
+.hasProblem { border-color: var(--danger); }
+.nodeHead { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs); color: var(--muted); }
+.nodeKind { flex: 1; text-transform: uppercase; letter-spacing: var(--tracking-label); }
+.problemDot { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-weight: 700; display: grid; place-items: center; }
+.nodeTitle { margin-top: var(--space-1); font-weight: 650; }
+.nodeProblem { margin-top: var(--space-1); color: var(--danger); font-size: var(--fs-sm); }
+.branchLabels { display: flex; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--muted); }
+.branchLabels span { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* inspector */
+.inspector { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); background: var(--panel); border-left: 1px solid var(--line); }
+.problems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.problem {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: var(--space-2) var(--space-3); text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--danger); border-radius: var(--radius-sm); font: inherit;
+}
+button.problem { cursor: pointer; }
+.problem span { color: var(--muted); font-size: var(--fs-sm); }
