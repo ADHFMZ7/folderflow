@@ -39,6 +39,21 @@ impl Default for Settings {
     }
 }
 
+impl Settings {
+    /// The model kinds whose default model is on a connection that exists.
+    pub fn working_kinds(&self) -> std::collections::BTreeSet<String> {
+        self.defaults
+            .iter()
+            .filter(|(_, model)| {
+                model
+                    .as_ref()
+                    .is_some_and(|m| self.connections.iter().any(|c| c.id == m.connection_id))
+            })
+            .map(|(kind, _)| kind.clone())
+            .collect()
+    }
+}
+
 /// Light or dark, or whichever the Mac is using.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

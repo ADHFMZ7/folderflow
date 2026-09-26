@@ -313,17 +313,7 @@ impl<P: ProviderClient> Backend<P> {
     /// The model kinds whose default model is on a connection that exists.
     fn working_models(&self) -> Result<BTreeSet<String>, ApiError> {
         let mut state = self.lock();
-        let settings = self.load(&mut state)?;
-        Ok(settings
-            .defaults
-            .iter()
-            .filter(|(_, model)| {
-                model
-                    .as_ref()
-                    .is_some_and(|m| settings.connections.iter().any(|c| c.id == m.connection_id))
-            })
-            .map(|(kind, _)| kind.clone())
-            .collect())
+        Ok(self.load(&mut state)?.working_kinds())
     }
 
     /// Loads the settings, remembering a recovery so it keeps being reported.

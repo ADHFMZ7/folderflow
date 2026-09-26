@@ -163,3 +163,63 @@ export type Problem = { stepId: string | null; code: ProblemCode; message: strin
 export type SaveResult = { workflow: Workflow; problems: Problem[] };
 
 export type Template = { id: string; name: string; blurb: string; trigger: string };
+
+// ---- Runs: see docs/engine.md ---------------------------------------------
+
+export type RunStatus = "queued" | "running" | "waiting" | "done" | "failed" | "interrupted" | "undone";
+export type TriggerKind = "fileAdded" | "schedule" | "runNow";
+export type ValueKind = "text" | "number" | "date" | "yesNo";
+/** A `{variable}`'s value and the kind its step gave it. Dates are YYYY-MM-DD; yes/no is "yes" or "no". */
+export type RunValue = { kind: ValueKind; value: string };
+export type RunFile = { path: string; inode: number };
+export type RunTrigger = { kind: TriggerKind; file: RunFile | null };
+export type StepOutcome = "running" | "done" | "failed";
+
+/** What one step did. `branch` is the exit a branching step chose; `values` are the ones it produced. */
+export type StepRun = {
+  stepId: string;
+  title: string;
+  type: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  outcome: StepOutcome;
+  branch: string | null;
+  values: Record<string, RunValue>;
+  message: string | null;
+};
+
+export type RunError = { stepId: string | null; message: string };
+
+/** One pass of one workflow over one file. `workflow` is the copy it runs, as it was when queued. */
+export type Run = {
+  id: string;
+  workflowId: string;
+  revision: number;
+  workflow: Workflow;
+  trigger: RunTrigger;
+  status: RunStatus;
+  /** When it was queued (RFC 3339). */
+  startedAt: string;
+  endedAt: string | null;
+  steps: StepRun[];
+  values: Record<string, RunValue>;
+  error: RunError | null;
+};
+
+/** A line in the run history. `file` is the file's name; `error` says why a failed run failed. */
+export type RunSummary = {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: RunStatus;
+  file: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  error: string | null;
+};
+
+/** Every field narrows the list. `before` is a run id: the runs listed after it. `limit` defaults to 100. */
+export type RunQuery = { workflowId?: string; status?: RunStatus; before?: string; limit?: number };
+
+/** The `run-changed` event. Screens ask for the details with getRun. */
+export type RunChanged = { runId: string; workflowId: string; status: RunStatus };

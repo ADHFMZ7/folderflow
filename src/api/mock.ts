@@ -3,9 +3,10 @@
 
 import type { Api } from "./api";
 import {
-  ApiError, type Connection, type Model, type ModelKind, type ModelRef, type Provider, type Settings,
-  type SettingsNotice, type Template, type Workflow,
+  ApiError, type Connection, type Model, type ModelKind, type ModelRef, type Provider, type Run, type RunChanged,
+  type Settings, type SettingsNotice, type Template, type Workflow,
 } from "./types";
+import { execute } from "./mockRuns";
 import {
   blankWorkflow, damagedSummary, roughValidate, sampleWorkflows, summarize, templateWorkflow, UUID,
 } from "./mockWorkflows";
@@ -84,6 +85,8 @@ export type MockOptions = {
   chosenFolder?: string | null;
   /** What the CSV picker answers; null is a cancel. A sample file when unset. */
   chosenCsv?: string | null;
+  /** What the file picker answers; empty is a cancel. A sample file when unset. */
+  chosenFiles?: string[];
 };
 
 const SETTINGS_KEY = "folderflow.settings";
@@ -143,6 +146,21 @@ export function createMockApi(options: MockOptions = {}): Api {
     if (draft.revision !== live.revision) { dropDraft(live.id); return null; }
     return draft;
   };
+
+  // Runs, oldest first, and whoever is listening for changes to them.
+  const runRecords: Run[] = [];
+  const listeners = new Set<(change: RunChanged) => void>();
+  const announce = (run: Run) => {
+    for (const listener of [...listeners]) listener({ runId: run.id, workflowId: run.workflowId, status: run.status });
+  };
+  const summaryOf = (run: Run) => ({
+    id: run.id, workflowId: run.workflowId, workflowName: run.workflow.name, status: run.status,
+    file: run.trigger.file?.path.split("/").pop() ?? null, startedAt: run.startedAt, endedAt: run.endedAt,
+    error: run.error?.message ?? null,
+  });
+  // Like the core, a workflow's runs go one at a time, in order.
+  let queue = Promise.resolve();
+  const later = () => new Promise((r) => setTimeout(r, delayMs));
 
   function read(): Settings {
     if (options.storedFile === "tooNew") {
@@ -251,6 +269,58 @@ export function createMockApi(options: MockOptions = {}): Api {
     async listTemplates() { return TEMPLATES; },
     async chooseFolder() { return options.chosenFolder === undefined ? "~/Documents" : options.chosenFolder; },
     async chooseCsv() { return options.chosenCsv === undefined ? "~/Documents/Log.csv" : options.chosenCsv; },
+    async chooseFiles() { return options.chosenFiles ?? ["~/Downloads/Scan_0042.pdf"]; },
+
+    async runNow(workflowId, files) {
+      const workflow = stored(workflowId);
+      if (workflow.steps.some((s) => s.type === "schedule")) {
+        throw new ApiError("invalid", "This workflow runs on its schedule, not on files.");
+      }
+      const problems = roughValidate(workflow).length;
+      if (problems) {
+        throw new ApiError("invalid", problems === 1
+          ? "Fix the problem with this workflow before running it."
+          : `Fix the ${problems} problems with this workflow before running it.`);
+      }
+      if (!files.length) throw new ApiError("invalid", "Choose at least one file to run on.");
+      const queued = files.map((path, i): Run => ({
+        id: crypto.randomUUID(), workflowId, revision: workflow.revision, workflow: structuredClone(workflow),
+        trigger: { kind: "runNow", file: { path, inode: 1000 + runRecords.length + i } }, status: "queued",
+        startedAt: new Date().toISOString(), endedAt: null, steps: [], values: {}, error: null,
+      }));
+      for (const run of queued) {
+        runRecords.push(run);
+        announce(run);
+        queue = queue.then(async () => {
+          await later();
+          run.status = "running";
+          announce(run);
+          execute(run, run.workflow, () => {});
+          announce(run);
+        });
+      }
+      return queued.map(summaryOf);
+    },
+
+    async listRuns(query = {}) {
+      const newest = [...runRecords].reverse()
+        .filter((r) => (query.workflowId === undefined || r.workflowId === query.workflowId)
+          && (query.status === undefined || r.status === query.status));
+      const from = query.before === undefined ? 0 : newest.findIndex((r) => r.id === query.before) + 1;
+      if (query.before !== undefined && from === 0) return [];
+      return newest.slice(from, from + (query.limit ?? 100)).map(summaryOf);
+    },
+
+    async getRun(id) {
+      const run = runRecords.find((r) => r.id === id);
+      if (!run) throw new ApiError("not_found", "That run no longer exists.");
+      return structuredClone(run);
+    },
+
+    onRunChanged(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
 
     async getWorkflow(id) { return stored(id); },
 

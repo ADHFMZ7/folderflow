@@ -1,7 +1,7 @@
 //! The Tauri commands: each one hands its arguments to `Backend` and nothing more.
 //! They are async so none of them runs on, and blocks, the main thread.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tauri::{Manager, State};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, FilePath};
@@ -14,6 +14,8 @@ use super::types::{
     ModelKind, Provider, SettingsChange, Template, WorkflowSummary,
 };
 use super::Backend;
+use crate::engine::runs::{Run, RunQuery, RunSummary};
+use crate::engine::Engine;
 use crate::storage::settings::Settings;
 use crate::workflow::{Problem, SaveResult, Workflow};
 
@@ -153,6 +155,29 @@ pub async fn list_templates(backend: State<'_, AppBackend>) -> Result<Vec<Templa
     Ok(backend.list_templates())
 }
 
+/// Runs the saved workflow once on each file. See docs/engine.md, "Run now".
+#[tauri::command]
+pub async fn run_now(
+    engine: State<'_, Engine>,
+    workflow_id: String,
+    files: Vec<String>,
+) -> Result<Vec<RunSummary>, ApiError> {
+    engine.run_now(&workflow_id, files)
+}
+
+#[tauri::command]
+pub async fn list_runs(
+    engine: State<'_, Engine>,
+    query: RunQuery,
+) -> Result<Vec<RunSummary>, ApiError> {
+    engine.list_runs(query)
+}
+
+#[tauri::command]
+pub async fn get_run(engine: State<'_, Engine>, id: String) -> Result<Run, ApiError> {
+    engine.get_run(&id)
+}
+
 /// The native folder picker. Opened from here rather than from the webview, so
 /// the window needs no dialog permission and paths come back with `~`.
 #[tauri::command]
@@ -179,13 +204,42 @@ pub async fn choose_csv(
     })
 }
 
-/// Opens a picker in front of `window`, starting where `start` points if it's a
-/// real folder (or a file in one), and answers with the path or `None`.
+/// The native file picker, for files to run a workflow on. Answers with none
+/// when cancelled.
+#[tauri::command]
+pub async fn choose_files(
+    window: tauri::WebviewWindow,
+    start: Option<String>,
+) -> Result<Vec<String>, ApiError> {
+    let (dialog, home) = dialog_at(&window, start)?;
+    Ok(dialog
+        .set_title("Choose files")
+        .blocking_pick_files()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|path| path.into_path().ok())
+        .map(|path| shorten_home(&path, &home))
+        .collect())
+}
+
+/// Opens a picker in front of `window`, and answers with the path or `None`.
 fn pick(
     window: &tauri::WebviewWindow,
     start: Option<String>,
     open: impl FnOnce(FileDialogBuilder<tauri::Wry>) -> Option<FilePath>,
 ) -> Result<Option<String>, ApiError> {
+    let (dialog, home) = dialog_at(window, start)?;
+    Ok(open(dialog)
+        .and_then(|path| path.into_path().ok())
+        .map(|path| shorten_home(&path, &home)))
+}
+
+/// A picker in front of `window`, starting where `start` points if it's a
+/// real folder (or a file in one), and the home folder to shorten paths with.
+fn dialog_at(
+    window: &tauri::WebviewWindow,
+    start: Option<String>,
+) -> Result<(FileDialogBuilder<tauri::Wry>, PathBuf), ApiError> {
     let home = window.path().home_dir().map_err(|e| {
         ApiError::new(
             ErrorCode::Io,
@@ -208,7 +262,5 @@ fn pick(
     if let Some(dir) = start_dir {
         dialog = dialog.set_directory(dir);
     }
-    Ok(open(dialog)
-        .and_then(|path| path.into_path().ok())
-        .map(|path| shorten_home(&path, &home)))
+    Ok((dialog, home))
 }

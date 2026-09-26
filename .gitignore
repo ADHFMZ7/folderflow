@@ -23,7 +23,3 @@ dist-ssr
 *.sln
 *.sw?
 
-# Python engine
-.venv
-__pycache__/
-*.pyc

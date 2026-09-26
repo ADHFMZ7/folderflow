@@ -2,8 +2,9 @@
 // method; see docs/api-contract.md.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Api } from "./api";
-import { ApiError, type ApiErrorCode } from "./types";
+import { ApiError, type ApiErrorCode, type RunChanged } from "./types";
 
 const CODES: ApiErrorCode[] = ["too_new", "not_found", "invalid", "keychain", "provider", "io", "conflict"];
 
@@ -45,6 +46,20 @@ export function createTauriApi(): Api {
     discardDraft: (id) => call("discard_draft", { id }),
     chooseFolder: (start) => call("choose_folder", { start: start ?? null }),
     chooseCsv: (start) => call("choose_csv", { start: start ?? null }),
+    chooseFiles: (start) => call("choose_files", { start: start ?? null }),
+    runNow: (workflowId, files) => call("run_now", { workflowId, files }),
+    listRuns: (query = {}) => call("list_runs", { query }),
+    getRun: (id) => call("get_run", { id }),
+    onRunChanged(listener) {
+      // listen() resolves later; a stop that comes first unlistens as soon as it does.
+      let stopped = false;
+      let unlisten: (() => void) | null = null;
+      listen<RunChanged>("run-changed", (event) => listener(event.payload)).then((fn) => {
+        if (stopped) fn();
+        else unlisten = fn;
+      }).catch(() => {});
+      return () => { stopped = true; unlisten?.(); };
+    },
   };
 }
 

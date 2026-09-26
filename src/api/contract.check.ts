@@ -26,6 +26,19 @@ import type { Problem as GProblem } from "./generated/Problem";
 import type { ProblemCode as GProblemCode } from "./generated/ProblemCode";
 import type { SaveResult as GSaveResult } from "./generated/SaveResult";
 import type { Appearance as GAppearance } from "./generated/Appearance";
+import type { Run as GRun } from "./generated/Run";
+import type { RunChanged as GRunChanged } from "./generated/RunChanged";
+import type { RunError as GRunError } from "./generated/RunError";
+import type { RunFile as GRunFile } from "./generated/RunFile";
+import type { RunQuery as GRunQuery } from "./generated/RunQuery";
+import type { RunStatus as GRunStatus } from "./generated/RunStatus";
+import type { RunSummary as GRunSummary } from "./generated/RunSummary";
+import type { RunTrigger as GRunTrigger } from "./generated/RunTrigger";
+import type { RunValue as GRunValue } from "./generated/RunValue";
+import type { StepOutcome as GStepOutcome } from "./generated/StepOutcome";
+import type { StepRun as GStepRun } from "./generated/StepRun";
+import type { TriggerKind as GTriggerKind } from "./generated/TriggerKind";
+import type { ValueKind as GValueKind } from "./generated/ValueKind";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Check<T extends true> = T;
@@ -56,4 +69,17 @@ export type ContractChecks = [
   Check<Same<GProblem, T.Problem>>,
   Check<Same<GProblemCode, T.ProblemCode>>,
   Check<Same<GSaveResult, T.SaveResult>>,
+  Check<Same<GRun, T.Run>>,
+  Check<Same<GRunChanged, T.RunChanged>>,
+  Check<Same<GRunError, T.RunError>>,
+  Check<Same<GRunFile, T.RunFile>>,
+  Check<Same<GRunQuery, T.RunQuery>>,
+  Check<Same<GRunStatus, T.RunStatus>>,
+  Check<Same<GRunSummary, T.RunSummary>>,
+  Check<Same<GRunTrigger, T.RunTrigger>>,
+  Check<Same<GRunValue, T.RunValue>>,
+  Check<Same<GStepOutcome, T.StepOutcome>>,
+  Check<Same<GStepRun, T.StepRun>>,
+  Check<Same<GTriggerKind, T.TriggerKind>>,
+  Check<Same<GValueKind, T.ValueKind>>,
 ];

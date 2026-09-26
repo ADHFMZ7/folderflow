@@ -27,6 +27,7 @@
 .problemCount:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); }
 @media (prefers-reduced-motion: reduce) { .savedFlash { animation: none; } }
 .spacer { flex: 1; }
+.runStatus { flex: 0 1 auto; min-width: 80px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-sm); }
 .alert {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-4);
   background: color-mix(in srgb, var(--danger) 10%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);

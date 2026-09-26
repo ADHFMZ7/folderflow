@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createMockApi } from "./mock";
-import { ApiError } from "./types";
+import { ApiError, type RunStatus, type Step } from "./types";
 
 const KEY = "sk-live-1234567890abcdef";
 
@@ -322,5 +322,105 @@ describe("drafts", () => {
     await a.discardDraft(live.id);
 
     expect(await a.getDraft(live.id)).toBeNull();
+  });
+});
+
+describe("runs", () => {
+  /** Run now → If {file} starts with "screenshot" → yes: Notify. */
+  async function screenshotCheck(a: ReturnType<typeof api>) {
+    const wf = await a.createWorkflow(null);
+    const steps: Step[] = [
+      { id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next: "i" },
+      { id: "i", type: "if", title: "Is it a screenshot?", position: { x: 0, y: 160 },
+        condition: { left: "{file}", op: "startsWith", right: "screenshot" }, branches: { yes: "n" } },
+      { id: "n", type: "notify", title: "Say so", position: { x: 0, y: 320 },
+        message: "{file}.{extension} in {folder} is a screenshot", next: null },
+    ];
+    return (await a.saveWorkflow({ ...wf, name: "Spot screenshots", steps })).workflow;
+  }
+
+  /** Every run-changed event until `runId` reaches `status`. */
+  function until(a: ReturnType<typeof api>, runId: string, status: RunStatus) {
+    const seen: RunStatus[] = [];
+    return new Promise<RunStatus[]>((resolve) => {
+      const stop = a.onRunChanged((change) => {
+        if (change.runId !== runId) return;
+        seen.push(change.status);
+        if (change.status === status) { stop(); resolve(seen); }
+      });
+    });
+  }
+
+  it("runs a workflow on each chosen file and keeps the run", async () => {
+    const a = api();
+    const wf = await screenshotCheck(a);
+
+    const [queued] = await a.runNow(wf.id, ["~/Desktop/Screenshot 1.png"]);
+    expect(queued).toMatchObject({ workflowId: wf.id, workflowName: "Spot screenshots", status: "queued", file: "Screenshot 1.png" });
+    expect(await until(a, queued.id, "done")).toEqual(["running", "done"]);
+
+    const run = await a.getRun(queued.id);
+    expect(run.steps.map((s) => [s.stepId, s.outcome, s.branch])).toEqual([
+      ["t", "done", null], ["i", "done", "yes"], ["n", "done", null],
+    ]);
+    expect(run.values.file).toEqual({ kind: "text", value: "Screenshot 1" });
+    expect(run.values.folder).toEqual({ kind: "text", value: "~/Desktop" });
+    expect(run.workflow.steps).toEqual(wf.steps);
+    expect((await a.listRuns()).map((r) => r.status)).toEqual(["done"]);
+  });
+
+  it("follows the other branch, and lists runs newest first", async () => {
+    const a = api();
+    const wf = await screenshotCheck(a);
+    const [first] = await a.runNow(wf.id, ["~/Desktop/Screenshot 1.png"]);
+    await until(a, first.id, "done");
+    const [second] = await a.runNow(wf.id, ["~/Documents/Invoice.pdf"]);
+    await until(a, second.id, "done");
+
+    const run = await a.getRun(second.id);
+    expect(run.steps.map((s) => s.branch)).toEqual([null, "no"]);
+    expect((await a.listRuns({ workflowId: wf.id })).map((r) => r.id)).toEqual([second.id, first.id]);
+    expect(await a.listRuns({ before: second.id })).toHaveLength(1);
+  });
+
+  it("fails a step it can't run yet, with the core's message", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    const steps: Step[] = [
+      { id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next: "r" },
+      { id: "r", type: "rename", title: "Rename it", position: { x: 0, y: 160 }, template: "{file} done", next: null },
+    ];
+    const saved = (await a.saveWorkflow({ ...wf, steps })).workflow;
+
+    const [queued] = await a.runNow(saved.id, ["~/a.txt"]);
+    await until(a, queued.id, "failed");
+
+    const run = await a.getRun(queued.id);
+    expect(run.error).toEqual({ stepId: "r", message: "Rename steps can't run in this version of FolderFlow yet." });
+    expect((await a.listRuns({ status: "failed" }))[0].error).toBe(run.error!.message);
+  });
+
+  it("refuses what the core refuses", async () => {
+    const a = api();
+    const wf = await screenshotCheck(a);
+    await expect(a.runNow(wf.id, [])).rejects.toMatchObject({ code: "invalid" });
+    await expect(a.getRun(crypto.randomUUID())).rejects.toMatchObject({ code: "not_found" });
+
+    const broken = { ...wf, steps: wf.steps.map((s) => (s.type === "notify" ? { ...s, message: "" } : s)) };
+    const saved = (await a.saveWorkflow(broken)).workflow;
+    await expect(a.runNow(saved.id, ["~/a.txt"])).rejects.toMatchObject({
+      code: "invalid", message: "Fix the problem with this workflow before running it.",
+    });
+
+    const weekly = await a.createWorkflow("cleanup");
+    await expect(a.runNow(weekly.id, ["~/a.txt"])).rejects.toMatchObject({
+      code: "invalid", message: "This workflow runs on its schedule, not on files.",
+    });
+    expect(await a.listRuns()).toEqual([]);
+  });
+
+  it("answers the file picker with the chosen files", async () => {
+    expect(await api({ chosenFiles: ["~/a.pdf", "~/b.pdf"] }).chooseFiles()).toEqual(["~/a.pdf", "~/b.pdf"]);
+    expect(await api({ chosenFiles: [] }).chooseFiles()).toEqual([]);
   });
 });

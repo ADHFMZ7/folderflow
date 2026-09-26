@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod api;
+pub mod engine;
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
