@@ -1,17 +1,8 @@
 /* The sidebar sits directly on the window chrome: no background or border of its own. */
 .sidebar, .rail { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.sidebar { padding: 0 var(--space-2) var(--space-3); }
-.rail { align-items: center; padding: 0 0 var(--space-3); }
-.top { display: flex; align-items: center; gap: var(--space-2); height: var(--titlebar-height); padding-left: 14px; flex-shrink: 0; }
-.sidebar .top { justify-content: space-between; padding-right: var(--space-1); }
-.rail .top { flex-direction: column; height: auto; padding: 16px 0 var(--space-2); gap: var(--space-3); }
-.lights { width: var(--traffic-lights-width); height: 12px; flex-shrink: 0; }
+.sidebar { padding: var(--space-1) var(--space-2) var(--space-3); }
+.rail { align-items: center; padding: var(--space-1) 0 var(--space-3); }
 .spacer { flex: 1; }
-.menu {
-  display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; padding: 0;
-  color: var(--muted); background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
-}
-.menu:hover { color: var(--text); background: var(--select); }
 .items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .item, .current {
   position: relative; display: flex; align-items: center; gap: var(--space-2); padding: 7px var(--space-3);

@@ -46,6 +46,21 @@ describe("sidebar", () => {
     expect(within(nav).getByLabelText("1 workflow needs you")).toHaveTextContent("1");
   });
 
+  it("keeps the menu button in the title bar, right of the traffic lights, open or collapsed", async () => {
+    const { user } = renderApp(home);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    const hide = screen.getByRole("button", { name: "Hide sidebar" });
+    const titleBar = hide.closest("header");
+    expect(titleBar).toHaveAttribute("data-tauri-drag-region");
+    expect(nav).not.toContainElement(hide);
+
+    await user.click(hide);
+
+    const show = screen.getByRole("button", { name: "Show sidebar" });
+    expect(show.closest("header")).toBe(titleBar);
+    expect(nav).not.toContainElement(show);
+  });
+
   it("lets the window be moved from its top row, since the title bar is hidden", async () => {
     renderApp(home);
     const hide = await screen.findByRole("button", { name: "Hide sidebar" });

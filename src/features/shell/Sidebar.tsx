@@ -1,4 +1,4 @@
-import { History, LayoutTemplate, PanelLeft, Settings, Workflow, type LucideIcon } from "lucide-react";
+import { History, LayoutTemplate, Settings, Workflow, type LucideIcon } from "lucide-react";
 import { hrefFor, type Page } from "../../app/routes";
 import { Badge } from "../../ui";
 import { ModelReadiness } from "../models/ModelReadiness";
@@ -11,26 +11,17 @@ const ITEMS: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "settings", label: "Settings", icon: Settings },
 ];
 
-type Props = { current: Page; needsYou: number; collapsed: boolean; onToggle: () => void };
+type Props = { current: Page; needsYou: number; collapsed: boolean };
 
 /**
- * The page list, on the window's chrome. Its top row leaves room for the macOS
- * traffic lights and moves the window when dragged. Collapsed, it's a rail of
- * icons whose links keep their names for screen readers and tooltips.
+ * The page list, on the window's chrome, below the title bar. Collapsed, it's a
+ * rail of icons whose links keep their names for screen readers and tooltips.
+ * The button that collapses it lives in the title bar, so it never moves.
  */
-export function Sidebar({ current, needsYou, collapsed, onToggle }: Props) {
+export function Sidebar({ current, needsYou, collapsed }: Props) {
   const needsLabel = `${needsYou} workflow${needsYou === 1 ? "" : "s"} needs you`;
   return (
     <nav className={collapsed ? styles.rail : styles.sidebar} aria-label="Main">
-      <div className={styles.top} data-tauri-drag-region>
-        <span className={styles.lights} aria-hidden />
-        <button type="button" className={styles.menu} onClick={onToggle}
-          aria-expanded={!collapsed} aria-controls="sidebar-pages" aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
-          title={collapsed ? "Show sidebar" : "Hide sidebar"}>
-          <PanelLeft size={17} strokeWidth={1.7} aria-hidden />
-        </button>
-      </div>
-
       <ul id="sidebar-pages" className={styles.items}>
         {ITEMS.map(({ page, label, icon: Icon }) => (
           <li key={page}>
