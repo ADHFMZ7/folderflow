@@ -6,3 +6,4 @@
 .toggle input:checked + .track { background: var(--ok); }
 .toggle input:checked + .track .thumb { left: 18px; }
 .toggle input:focus-visible + .track { box-shadow: var(--focus); }
+.toggle:has(input:disabled) { cursor: default; opacity: 0.5; }
