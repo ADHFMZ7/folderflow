@@ -1,5 +1,6 @@
 pub mod api;
 pub mod storage;
+pub mod workflow;
 
 use std::sync::Arc;
 
@@ -32,6 +33,11 @@ pub fn run() {
             commands::remove_connection,
             commands::list_models,
             commands::list_workflows,
+            commands::get_workflow,
+            commands::create_workflow,
+            commands::save_workflow,
+            commands::delete_workflow,
+            commands::validate_workflow,
             commands::list_templates,
         ])
         .run(tauri::generate_context!())

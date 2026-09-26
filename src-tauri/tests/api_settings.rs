@@ -291,5 +291,5 @@ fn the_catalog_lists_come_from_the_backend() {
     assert_eq!(h.backend.list_model_kinds(), catalog::model_kinds());
     assert_eq!(h.backend.list_providers(), catalog::providers());
     assert_eq!(h.backend.list_templates(), catalog::templates());
-    assert!(h.backend.list_workflows().is_empty());
+    assert!(h.backend.list_workflows().unwrap().is_empty());
 }

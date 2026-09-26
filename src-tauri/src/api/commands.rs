@@ -10,6 +10,7 @@ use super::types::{
 };
 use super::Backend;
 use crate::storage::settings::Settings;
+use crate::workflow::{Problem, SaveResult, Workflow};
 
 pub type AppBackend = Backend<HttpProviders>;
 
@@ -73,7 +74,44 @@ pub async fn list_models(
 pub async fn list_workflows(
     backend: State<'_, AppBackend>,
 ) -> Result<Vec<WorkflowSummary>, ApiError> {
-    Ok(backend.list_workflows())
+    backend.list_workflows()
+}
+
+#[tauri::command]
+pub async fn get_workflow(
+    backend: State<'_, AppBackend>,
+    id: String,
+) -> Result<Workflow, ApiError> {
+    backend.get_workflow(&id)
+}
+
+#[tauri::command]
+pub async fn create_workflow(
+    backend: State<'_, AppBackend>,
+    template_id: Option<String>,
+) -> Result<Workflow, ApiError> {
+    backend.create_workflow(template_id)
+}
+
+#[tauri::command]
+pub async fn save_workflow(
+    backend: State<'_, AppBackend>,
+    workflow: Workflow,
+) -> Result<SaveResult, ApiError> {
+    backend.save_workflow(workflow)
+}
+
+#[tauri::command]
+pub async fn delete_workflow(backend: State<'_, AppBackend>, id: String) -> Result<(), ApiError> {
+    backend.delete_workflow(&id)
+}
+
+#[tauri::command]
+pub async fn validate_workflow(
+    backend: State<'_, AppBackend>,
+    workflow: Workflow,
+) -> Result<Vec<Problem>, ApiError> {
+    backend.validate_workflow(workflow)
 }
 
 #[tauri::command]
