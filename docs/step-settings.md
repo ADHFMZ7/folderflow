@@ -33,10 +33,10 @@ What these teach us:
 Top to bottom, for every step:
 
 1. **Kind line**: glyph and label ("AI · Extract"), as on the card.
-2. **Title**: the card's sentence. Plain text.
+2. **Title**: the card's sentence. It follows the settings ("Move to Receipts/{year}", "Pull out the date, vendor and amount") while it still equals the title the previous settings gave, or a fresh step's title; once the user edits it, it's left alone. No format change: `steps/titles.ts`.
 3. **Problems banner** for problems that don't belong to a field (see Validation).
 4. **The step's form** (below). Fields in the order the user thinks about them.
-5. **For AI steps, a "Runs on" line**: "Your default LLM: Claude Sonnet (Anthropic). This file's contents are sent to Anthropic." or "…runs on this Mac; nothing leaves it." Links to Settings when there's no default.
+5. **For AI steps, a "Runs on" line**: "Runs on Claude from Anthropic." followed by the provider's own privacy sentence ("Files your workflows run on are sent to Anthropic." or "Runs on this Mac. Files never leave it."). "No default LLM model yet. Choose one in Settings" when there's none.
 6. **Delete step**.
 
 Every edit calls `onChange(wholeNewStep)`; nothing else changes. Forms are controlled and stateless apart from UI state (an open autocomplete, an expanded row).
@@ -87,7 +87,7 @@ What makes them work well, and how we ask for it without jargon:
 | **Move / Copy** | **Move or copy**: Segmented Move / Copy. **To folder**: FolderField. | Preview "Example: ~/Documents/Receipts/2026". "Folders that don't exist yet are created." |
 | **Create file** | **File name**: VariableText. **In folder**: FolderField, empty means "the file's folder" (new field, see Format changes). **Contents**: VariableText textarea. | "Include the extension, like .txt or .md." Preview of the name. |
 | **Tag** | **Tags**: ListEditor of VariableText rows (at least one). | "Finder tags. `{category}` tags each file with its category." |
-| **Add row** | **Spreadsheet**: FolderField-like file field with **Choose…** (save dialog, .csv). **Columns**: ListEditor rows of **Heading** + **Value** (VariableText). | "A new file starts with a row of headings. Values go in the order shown." Preview of one row. |
+| **Add row** | **Spreadsheet**: a file field with **Choose…** (an existing .csv; a new file's path is typed). **Columns**: ListEditor rows of **Heading** + **Value** (VariableText). | "A new file starts with a row of headings. Values go in the order shown." Preview of one row. |
 | **Notify** | **Message**: VariableText. | Preview. |
 
 ### Logic and human
@@ -117,6 +117,7 @@ Folder and CSV pickers need `tauri-plugin-dialog`.
 - **Rust**: add the plugin, and two commands `choose_folder(start)` and `choose_csv(start)` that open the native panel from Rust and return the path with the home folder shortened to `~`, or `null` if cancelled. Opening from Rust keeps the path handling in one place and needs no dialog permission in the window's capability.
 - **Api**: `chooseFolder(start?: string): Promise<string | null>` and `chooseCsv(start?: string): Promise<string | null>` in `Api`, `tauri.ts` and `mock.ts`.
 - **Browser and mock**: the mock answers with a value set in `MockOptions` (tests) or a fixed sample (`~/Documents`) in previews. The text field always works, so nothing depends on the picker.
+- **CSV**: the picker chooses an existing .csv. A save panel would let people name a new file, but macOS then asks "Replace?" for an existing one, which is wrong (rows are appended) and alarming. A new file's path is typed.
 - Later, the folder picked is the natural moment to grant access to it (confinement, "nothing outside the granted folders").
 
 ## Validation feedback
@@ -127,7 +128,7 @@ Problems arrive per step from Rust after edits pause. Shown:
 - **In the banner** at the top of the form when they have no field (loop, unreachable, no model, many triggers). "No model" links to Settings.
 - **Instantly, client-side**, for unknown `{names}` in a VariableText, so the user sees it while typing; the Rust problem then agrees.
 
-To place a problem on a field without parsing messages, `Problem` gains an optional `field` (see Format changes). Until a problem has one it goes in the banner.
+`Problem.field` places a problem on its field (see Format changes). Each form lists the fields it shows (`SHOWN_FIELDS` in `steps/StepForm.tsx`); anything else goes in the banner. List rows show problems about anything inside them (`categories.1`, `categories.1.label`). On a step no path reaches, an unknown `{name}` reads "Connect this step to the workflow to use {name}", since Rust doesn't check variables there.
 
 ## Format changes
 
@@ -139,8 +140,9 @@ All are additive and optional in the JSON (`serde(default)`, `skip_serializing_i
 | `Field.description?` ("What to look for"), for Extract and Agent outputs. | Picks the right candidate (total vs subtotal), explains the format wanted. | 1, 2, 6, 7 | **Now** |
 | Add row: `headers?: string[]`, one per column, written as the first row of a new file. | A CSV without headings is unreadable in Numbers or Excel. A parallel list keeps `columns: string[]` unchanged; the form edits them as pairs. Validation: `invalid_value` if lengths differ. | 1, 10 | **Now** |
 | Create file: `folder?: string` (variables allowed; empty means the file's folder). | Notes and summaries often belong elsewhere; also scheduled runs have no file folder. | 6, showcase | **Now** |
-| `Problem.field?: string`, the field the problem is about (`"folder"`, `"categories"`, `"categories.2.label"`, `"condition.left"`). | Puts problems next to their field without parsing messages. | all | **Now** |
+| `Problem.field?: string`, the field the problem is about (`"folder"`, `"categories"`, `"categories.2.label"`, `"condition.left"`), set by Rust for every field-level problem. | Puts problems next to their field without parsing messages. | all | **Now** |
 | Classify and Ask me: an optional name for their result (default `category` / `answer`). | Two Classify steps on one path both produce `{category}`; the second hides the first. | 8 plus a second sort | Later |
+| Scheduled runs and files: refuse file steps (Rename, Move, Extract…) after a Schedule trigger, or give Schedule a folder to run over. | A scheduled run has no file, yet nothing stops a file step after it. Belongs with the engine design. | 4 | Later |
 | Dates and numbers: a display format per field (e.g. "14 Sep 2026", two decimals, currency). | Names people like vs. sortable ISO dates. Until then dates are `YYYY-MM-DD` and numbers as read. | 1, 6 | Later |
 | If: "is empty" / "is not empty", and "is before/after N days from today" for dates. | "Contracts ending in 30 days", "invoices with no due date". | 2, 7 | Later |
 | Tag colours (Finder's seven). | Nice, not needed to sort files. | 3 | Later |
@@ -200,12 +202,16 @@ Shows off every non-trigger step type, three kinds of AI step, a question, a mer
 
 Every step type except the other two triggers appears. Needs the category and field descriptions and Create file's folder from "Now"; without them it still works, with less guidance for the models.
 
-## Open questions
+## Decisions
 
-1. **Scheduled runs have no file**, but nothing stops Rename or Move after a Schedule trigger. Should validation refuse file steps after `schedule` (a new problem code), or should Schedule gain a folder to run over (which the "Weekly clean-up" blurb, "archive Downloads files older than 30 days", already promises)?
-2. **Add row headings**: parallel `headers` (additive, proposed) or `columns: [{ heading, value }]` (cleaner, but a breaking change to v1 and to `defaultStep` in graph.ts)?
-3. **`Problem.field`** now, or map problems to fields by code and message first and add it later?
-4. **Pickers from Rust commands** (proposed) or the dialog plugin's JavaScript API with a capability?
-5. **Titles**: keep them hand-written, or offer to fill the title from the settings ("Move to Receipts/{year}") until the user edits it?
-6. **"Runs on" line** in AI forms needs settings and providers in the inspector; in scope for Phase 2 or later?
-7. **Agent abilities**: is "Read the file's contents" the only one for now, and should it be on by default and possible to turn off?
+Settled when the design was approved:
+
+1. **Schedule and file steps**: validation is unchanged for now; it belongs with the engine design (listed under Later). The "Weekly clean-up" blurb now says what it does: "Every Friday at 17:00, a reminder to tidy Downloads".
+2. **Add row headings**: the separate optional `headers` list.
+3. **`Problem.field`**: added now, set by Rust validation.
+4. **Pickers**: Rust commands `choose_folder` and `choose_csv`; the webview gets no dialog permission.
+5. **Titles**: follow the settings until the user edits them, with no format change.
+6. **"Runs on" line**: in, from settings and the provider catalog.
+7. **Agent abilities**: only "Read the file's contents", on by default.
+
+All five "Now" format changes are in, with Rust validation tests, the TypeScript types and `contract.check.ts`.
