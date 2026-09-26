@@ -16,8 +16,9 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `connect(providerId, credentials)` | `connect` | `providerId`, `credentials` | `ConnectOutcome` |
 | `removeConnection(id)` | `remove_connection` | `id` | `Settings` |
 | `listModels(connectionId)` | `list_models` | `connectionId` | `Model[]` |
-| `listWorkflows()` | `list_workflows` | none | `WorkflowSummary[]` |
 | `listTemplates()` | `list_templates` | none | `Template[]` |
+
+Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_workflow`, `delete_workflow`, `validate_workflow`) and the workflow file format are in `docs/workflow-format.md`.
 
 ## Rules
 
@@ -37,5 +38,6 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
   | `keychain` | The Keychain refused a request |
   | `provider` | A provider answered in a way that isn't an expected refusal |
   | `io` | Reading or writing a file failed |
+  | `conflict` | A save was based on an older revision than the one on disk |
 
 - **Load notices.** `getSettings` returns `notice: { kind: "recovered", backup }` when the settings file was unreadable and was moved aside, and keeps returning it for the rest of the session, so a second call (React Strict Mode, a remount) can't lose it. Dismissing it only hides it in the UI. A file from a newer version fails with `too_new`, and the UI blocks until the user opens a newer FolderFlow.

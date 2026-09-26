@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Api } from "./api";
 import { ApiError, type ApiErrorCode } from "./types";
 
-const CODES: ApiErrorCode[] = ["too_new", "not_found", "invalid", "keychain", "provider", "io"];
+const CODES: ApiErrorCode[] = ["too_new", "not_found", "invalid", "keychain", "provider", "io", "conflict"];
 
 function toApiError(e: unknown): ApiError {
   if (e && typeof e === "object" && "code" in e && "message" in e && CODES.includes(e.code as ApiErrorCode)) {
@@ -34,6 +34,11 @@ export function createTauriApi(): Api {
     listModels: (connectionId) => call("list_models", { connectionId }),
     listWorkflows: () => call("list_workflows"),
     listTemplates: () => call("list_templates"),
+    getWorkflow: (id) => call("get_workflow", { id }),
+    createWorkflow: (templateId) => call("create_workflow", { templateId }),
+    saveWorkflow: (workflow) => call("save_workflow", { workflow }),
+    deleteWorkflow: (id) => call("delete_workflow", { id }),
+    validateWorkflow: (workflow) => call("validate_workflow", { workflow }),
   };
 }
 

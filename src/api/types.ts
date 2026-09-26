@@ -65,7 +65,7 @@ export type LoadedSettings = { settings: Settings; notice: SettingsNotice };
 /** The parts of Settings the front end may change. Connections change only through connect and remove. */
 export type SettingsChange = Partial<Pick<Settings, "setupComplete" | "openAtLogin" | "defaults">>;
 
-export type ApiErrorCode = "too_new" | "not_found" | "invalid" | "keychain" | "provider" | "io";
+export type ApiErrorCode = "too_new" | "not_found" | "invalid" | "keychain" | "provider" | "io" | "conflict";
 
 /** What a failed api call throws. Messages never contain a key. */
 export class ApiError extends Error {
@@ -83,6 +83,70 @@ export type WorkflowSummary = {
   lastRun: string | null;
   needsYou: number;
   kindsNeeded: ModelKindId[];
+  /** "damaged": the file can't be read and is kept as is. "tooNew": written by a newer FolderFlow. */
+  status: "ok" | "damaged" | "tooNew";
 };
+
+// ---- Workflows: see docs/workflow-format.md -------------------------------
+
+export type Position = { x: number; y: number };
+
+/** A branch of a classify or askMe step. The id never changes; the label is display text. */
+export type Branch = { id: string; label: string };
+
+export type FieldType = "text" | "number" | "date" | "yesNo";
+export type Field = { name: string; type: FieldType };
+
+export type Schedule = { every: "day" | "weekday" | "week"; time: string; weekday?: number };
+
+export type ConditionOp = ">" | "<" | ">=" | "<=" | "=" | "!=" | "contains" | "startsWith";
+export type Condition = { left: string; op: ConditionOp; right: string };
+
+type StepBase = { id: string; title: string; position: Position };
+/** Where a plain step goes next; null ends the run. */
+type Next = { next: string | null };
+/** Branch id → step id. A branch with no entry ends the run. */
+type Branches = { branches: Record<string, string> };
+
+export type Step = StepBase & (
+  | ({ type: "fileAdded"; folder: string; fileTypes: string[]; subfolders: boolean } & Next)
+  | ({ type: "schedule"; schedule: Schedule } & Next)
+  | ({ type: "runNow" } & Next)
+  | ({ type: "classify"; categories: Branch[]; instructions: string } & Branches)
+  | ({ type: "extract"; fields: Field[]; ifMissing: "review" | "fail" } & Next)
+  | ({ type: "write"; instruction: string; saveAs: string } & Next)
+  | ({ type: "agent"; instruction: string; abilities: string[]; outputs: Field[] } & Next)
+  | ({ type: "rename"; template: string } & Next)
+  | ({ type: "move"; to: string; mode: "move" | "copy" } & Next)
+  | ({ type: "createFile"; name: string; contents: string } & Next)
+  | ({ type: "tag"; tags: string[] } & Next)
+  | ({ type: "addRow"; file: string; columns: string[] } & Next)
+  | ({ type: "notify"; message: string } & Next)
+  | ({ type: "if"; condition: Condition } & Branches)
+  | { type: "stop" }
+  | ({ type: "askMe"; question: string; answers: Branch[] } & Branches)
+);
+
+export type StepType = Step["type"];
+
+export type Workflow = {
+  version: number;
+  /** A UUID; it becomes the file name. */
+  id: string;
+  name: string;
+  /** Goes up by one on every save. A save based on an older revision fails with "conflict". */
+  revision: number;
+  enabled: boolean;
+  steps: Step[];
+};
+
+export type ProblemCode =
+  | "no_trigger" | "many_triggers" | "duplicate_id" | "missing_step" | "unknown_branch" | "loop"
+  | "unreachable" | "required" | "unknown_variable" | "no_model" | "invalid_value";
+
+/** Something that stops a workflow from being turned on. stepId is null for the whole workflow. */
+export type Problem = { stepId: string | null; code: ProblemCode; message: string };
+
+export type SaveResult = { workflow: Workflow; problems: Problem[] };
 
 export type Template = { id: string; name: string; blurb: string; trigger: string };

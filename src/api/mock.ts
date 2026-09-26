@@ -4,8 +4,11 @@
 import type { Api } from "./api";
 import {
   ApiError, type Connection, type Model, type ModelKind, type ModelRef, type Provider, type Settings,
-  type SettingsNotice, type Template, type WorkflowSummary,
+  type SettingsNotice, type Template, type Workflow,
 } from "./types";
+import {
+  blankWorkflow, damagedSummary, roughValidate, sampleWorkflows, summarize, templateWorkflow, UUID,
+} from "./mockWorkflows";
 
 export const MODEL_KINDS: ModelKind[] = [
   {
@@ -58,15 +61,6 @@ export const TEMPLATES: Template[] = [
   { id: "cleanup", name: "Weekly clean-up", blurb: "Every Friday, archive Downloads files older than 30 days", trigger: "Schedule" },
 ];
 
-export const SAMPLE_WORKFLOWS: WorkflowSummary[] = [
-  { id: "w1", name: "Receipts and invoices", trigger: "File added · ~/Downloads", enabled: true,
-    lastRun: "Scan_0042.pdf · 2 min ago", needsYou: 1, kindsNeeded: ["llm", "system1"] },
-  { id: "w2", name: "Tidy screenshots", trigger: "File added · ~/Desktop", enabled: true,
-    lastRun: "Screenshot 10.02 · 1 h ago", needsYou: 0, kindsNeeded: ["system1"] },
-  { id: "w3", name: "Weekly clean-up", trigger: "Schedule · Fridays 17:00", enabled: false,
-    lastRun: null, needsYou: 0, kindsNeeded: [] },
-];
-
 export const FRESH_SETTINGS: Settings = { setupComplete: false, openAtLogin: true, connections: [], defaults: {} };
 
 type KeyValueStore = Pick<Storage, "getItem" | "setItem">;
@@ -75,7 +69,10 @@ export type MockOptions = {
   storage?: KeyValueStore;
   delayMs?: number;
   ollamaRunning?: boolean;
-  workflows?: WorkflowSummary[];
+  /** Start with sample workflows, one of which needs you. */
+  sampleWorkflows?: boolean;
+  /** File names of workflow files that can't be read. */
+  damagedWorkflows?: string[];
   /** Settings already on disk before the app starts. */
   settings?: Partial<Settings>;
   /** Pretend the settings file on disk was damaged, or written by a newer version. */
@@ -93,7 +90,7 @@ function memoryStore(): KeyValueStore {
 
 /** Follows the same rules as the Rust core; see docs/api-contract.md. */
 export function createMockApi(options: MockOptions = {}): Api {
-  const { storage = memoryStore(), delayMs = 400, ollamaRunning = true, workflows = [] } = options;
+  const { storage = memoryStore(), delayMs = 400, ollamaRunning = true } = options;
   const wait = () => new Promise((r) => setTimeout(r, delayMs));
   let connectionCount = 0;
   // Like the Rust core, a recovery is reported by every getSettings for the rest of the session.
@@ -101,6 +98,30 @@ export function createMockApi(options: MockOptions = {}): Api {
     ? { kind: "recovered", backup: "~/Library/Application Support/com.adhfmz7.folderflow/settings.damaged-1790300000-3f2a9c1e.json" }
     : null;
   if (options.settings) write({ ...FRESH_SETTINGS, ...options.settings });
+
+  // Workflows, keyed by id, with made-up run state for previews.
+  const WORKFLOWS_KEY = "folderflow.workflows";
+  const runs = new Map<string, { needsYou: number; lastRun: string | null }>();
+  const readWorkflows = (): Record<string, Workflow> => JSON.parse(storage.getItem(WORKFLOWS_KEY) ?? "{}");
+  const writeWorkflows = (all: Record<string, Workflow>) => storage.setItem(WORKFLOWS_KEY, JSON.stringify(all));
+  if (options.sampleWorkflows && !storage.getItem(WORKFLOWS_KEY)) {
+    const all: Record<string, Workflow> = {};
+    for (const { workflow, run } of sampleWorkflows()) {
+      all[workflow.id] = workflow;
+      runs.set(workflow.id, run);
+    }
+    writeWorkflows(all);
+  }
+  const checkId = (id: string) => {
+    if (!UUID.test(id)) throw new ApiError("invalid", "That isn't a workflow id.");
+  };
+  const stored = (id: string) => {
+    checkId(id);
+    const wf = readWorkflows()[id];
+    if (!wf) throw new ApiError("not_found", "That workflow doesn't exist.");
+    return wf;
+  };
+  const put = (wf: Workflow) => writeWorkflows({ ...readWorkflows(), [wf.id]: wf });
 
   function read(): Settings {
     if (options.storedFile === "tooNew") {
@@ -200,7 +221,41 @@ export function createMockApi(options: MockOptions = {}): Api {
       return modelsFor(connection);
     },
 
-    async listWorkflows() { return workflows; },
+    async listWorkflows() {
+      const saved = Object.values(readWorkflows()).map((wf) => summarize(wf, runs.get(wf.id)));
+      return [...saved, ...(options.damagedWorkflows ?? []).map(damagedSummary)];
+    },
     async listTemplates() { return TEMPLATES; },
+
+    async getWorkflow(id) { return stored(id); },
+
+    async createWorkflow(templateId) {
+      const wf = templateId === null ? blankWorkflow() : templateWorkflow(templateId);
+      if (!wf) throw new ApiError("not_found", "FolderFlow doesn't have that template.");
+      put(wf);
+      return wf;
+    },
+
+    async saveWorkflow(workflow) {
+      const current = stored(workflow.id);
+      if (workflow.revision !== current.revision) {
+        throw new ApiError("conflict", "This workflow was changed somewhere else since you opened it.");
+      }
+      const problems = roughValidate(workflow);
+      if (workflow.enabled && problems.length) {
+        throw new ApiError("invalid", "Fix the problems before turning this workflow on.");
+      }
+      const saved = { ...workflow, revision: workflow.revision + 1 };
+      put(saved);
+      return { workflow: saved, problems };
+    },
+
+    async deleteWorkflow(id) {
+      stored(id);
+      const { [id]: _removed, ...rest } = readWorkflows();
+      writeWorkflows(rest);
+    },
+
+    async validateWorkflow(workflow) { return roughValidate(workflow); },
   };
 }

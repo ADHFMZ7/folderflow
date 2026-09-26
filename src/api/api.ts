@@ -4,8 +4,8 @@
 
 import { createContext, useContext } from "react";
 import type {
-  ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Provider, Settings,
-  SettingsChange, Template, WorkflowSummary,
+  ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, SaveResult,
+  Settings, SettingsChange, Template, Workflow, WorkflowSummary,
 } from "./types";
 
 /** Every method may reject with an ApiError. */
@@ -26,6 +26,16 @@ export interface Api {
 
   listWorkflows(): Promise<WorkflowSummary[]>;
   listTemplates(): Promise<Template[]>;
+
+  // Workflows: see docs/workflow-format.md.
+  getWorkflow(id: string): Promise<Workflow>;
+  /** A blank workflow, or a copy of a template. Saved at once, with revision 1. */
+  createWorkflow(templateId: string | null): Promise<Workflow>;
+  /** Fails with "conflict" if `workflow.revision` isn't the revision on disk. */
+  saveWorkflow(workflow: Workflow): Promise<SaveResult>;
+  /** Moves the workflow's file to the trash. */
+  deleteWorkflow(id: string): Promise<void>;
+  validateWorkflow(workflow: Workflow): Promise<Problem[]>;
 }
 
 export const ApiContext = createContext<Api | null>(null);
