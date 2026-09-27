@@ -7,6 +7,7 @@
 //! those alone.
 
 pub mod app;
+pub mod content;
 pub mod files;
 pub mod intake;
 pub mod notices;
