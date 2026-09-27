@@ -192,5 +192,30 @@ export function useEditor(id: string) {
     }
   }, [api, id]);
 
-  return { state, edit, undo, redo, flush, apply, discard, reload: load };
+  /**
+   * Turns the workflow on or off. Turning on saves the edits so far with it.
+   * Turning off makes changes that weren't live yet the saved version: with
+   * nothing running, there's nothing for a draft to wait for.
+   */
+  const setEnabled = useCallback(async (enabled: boolean) => {
+    if (!(await flush())) return;
+    const current = latestDraft.current;
+    const base = live.current;
+    if (!current || !base) return;
+    try {
+      const { workflow, problems } = await api.saveWorkflow({ ...current, enabled, revision: base.revision });
+      if (!enabled) await api.discardDraft(id);
+      live.current = workflow;
+      persisted.current = workflow;
+      validated.current = workflow;
+      setState((cur) => (cur.status === "ready"
+        ? { ...cur, draft: workflow, problems, pendingApply: false, save: { kind: "saved" } }
+        : cur));
+    } catch (e) {
+      const conflict = e instanceof ApiError && e.code === "conflict";
+      setState((cur) => (cur.status === "ready" ? { ...cur, save: { kind: "failed", conflict, message: messageOf(e) } } : cur));
+    }
+  }, [api, flush, id]);
+
+  return { state, edit, undo, redo, flush, apply, discard, setEnabled, reload: load };
 }

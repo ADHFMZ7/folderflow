@@ -1,13 +1,17 @@
-//! The engine: runs the workflows. It follows each run's steps, records every
-//! run, and tells the window when a run changes. See docs/engine.md.
+//! The engine: runs the workflows. It watches their folders, wakes their
+//! schedules, follows each run's steps, records every run, and tells the
+//! window when a run changes. See docs/engine.md.
 //!
-//! The clock, notifications and window events are behind traits, so tests
-//! run the engine for real in a temp folder with fakes for those alone.
+//! The clock, notifications, window events and folder watching are behind
+//! traits, so tests run the engine for real in a temp folder with fakes for
+//! those alone.
 
 pub mod app;
 pub mod files;
+pub mod intake;
 mod runner;
 pub mod runs;
+pub mod schedule;
 pub mod values;
 
 use std::collections::HashMap;
@@ -15,9 +19,10 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::time::Duration;
 
-use chrono::{DateTime, FixedOffset, SecondsFormat};
+use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use serde::Serialize;
 use tokio::sync::mpsc;
 use ts_rs::TS;
@@ -26,12 +31,14 @@ use crate::api::pickers::expand_home;
 use crate::api::types::{ApiError, ErrorCode};
 use crate::storage::data_dir::DataDir;
 use crate::storage::settings::SettingsStore;
-use crate::storage::workflows::WorkflowStore;
-use crate::workflow::{validate, StepKind};
-use files::{Files, Grants, Trash};
+use crate::storage::workflows::{WorkflowError, WorkflowStore};
+use crate::workflow::{validate, StepKind, Workflow};
+use files::{Files, Grants, Trash, Writes};
+use intake::{Intake, Watch};
 use runs::{
     Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, TriggerKind, UndoResult,
 };
+use schedule::Schedules;
 
 /// The time on the Mac, in its own time zone.
 pub trait Clock: Send + Sync {
@@ -49,6 +56,13 @@ pub trait EngineEvents: Send + Sync {
     fn run_changed(&self, change: RunChanged);
 }
 
+/// Watches folders, and tells the engine of changes in them through
+/// `Engine::folders_changed`.
+pub trait Watcher: Send + Sync {
+    /// Watch exactly these folders from now on, each with its subfolders or not.
+    fn watch(&self, folders: &[(PathBuf, bool)]);
+}
+
 /// The `run-changed` event.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +78,7 @@ pub struct Ports {
     pub notifier: Arc<dyn Notifier>,
     pub events: Arc<dyn EngineEvents>,
     pub trash: Arc<dyn Trash>,
+    pub watcher: Arc<dyn Watcher>,
 }
 
 impl Ports {
@@ -86,6 +101,11 @@ impl Clock for SystemClock {
 /// How many runs `list_runs` returns when not told.
 const DEFAULT_LIMIT: u32 = 100;
 
+/// The longest the schedule clock sleeps, so waking from sleep or a change
+/// of time zone is noticed within a minute.
+const SCHEDULE_NAP: Duration = Duration::from_secs(60);
+
+#[derive(Clone)]
 pub struct Engine {
     inner: Arc<Inner>,
 }
@@ -97,17 +117,25 @@ struct Inner {
     journal: PathBuf,
     home: PathBuf,
     ports: Ports,
+    intake: Arc<Intake>,
+    schedules: Mutex<Schedules>,
+    /// Where file actions a crash cut off put files, until `start` records
+    /// them as FolderFlow's.
+    recovered: Mutex<Vec<PathBuf>>,
+    /// Turning workflows on and off, one at a time.
+    reloading: Mutex<()>,
     /// One queue per workflow, so its runs go one at a time, in order.
     queues: Mutex<HashMap<String, mpsc::UnboundedSender<String>>>,
 }
 
 impl Engine {
-    /// Starts the engine on the app's data folder. File actions a crash left
+    /// Opens the engine on the app's data folder. File actions a crash left
     /// half-known are settled from the journal first. Runs left queued or
     /// running when the app last stopped are marked interrupted; none restarts
-    /// on its own (decision 5).
+    /// on its own (decision 5). Nothing is watched until `start`.
     pub fn new(dir: &DataDir, home: PathBuf, ports: Ports) -> io::Result<Self> {
-        files::recover(&dir.journal_path())?;
+        let recovered = files::recover_all(&dir.journal_path())?;
+        let engine_dir = dir.root().join("engine");
         let inner = Inner {
             runs: RunStore::new(dir),
             workflows: WorkflowStore::new(dir),
@@ -115,6 +143,10 @@ impl Engine {
             journal: dir.journal_path(),
             home,
             ports,
+            intake: Arc::new(Intake::new(engine_dir.join("seen"))),
+            schedules: Mutex::new(Schedules::load(engine_dir.join("schedules.json"))),
+            recovered: Mutex::new(recovered.touched),
+            reloading: Mutex::new(()),
             queues: Mutex::new(HashMap::new()),
         };
         for mut run in inner.runs.all()? {
@@ -126,6 +158,63 @@ impl Engine {
         Ok(Self {
             inner: Arc::new(inner),
         })
+    }
+
+    /// Turns on every workflow that is on, runs the files that arrived in
+    /// their folders while the app was quit (oldest first), and starts the
+    /// schedule clock. Must be called inside a Tokio runtime.
+    pub fn start(&self) {
+        let inner = &self.inner;
+        let ids = match inner.workflows.list() {
+            Ok(listed) => listed.into_iter().map(|l| l.id).collect(),
+            Err(e) => {
+                eprintln!("folderflow: couldn't list the workflows: {e}");
+                Vec::new()
+            }
+        };
+        let _reloading = inner.reloading();
+        let mut carrying_on = Vec::new();
+        for id in &ids {
+            if let Some(false) = inner.turn_on_or_off(id) {
+                carrying_on.push(id.clone());
+            }
+        }
+        // Files a crash cut off mid-write are FolderFlow's, not new.
+        for path in std::mem::take(&mut *lock(&inner.recovered)) {
+            inner.intake.ours(&path);
+        }
+        inner.ports.watcher.watch(&inner.intake.folders());
+        for id in carrying_on {
+            Inner::take(inner, &id);
+        }
+        inner.check_schedules();
+        tokio::spawn(keep_time(Arc::downgrade(inner)));
+    }
+
+    /// Picks up a change to a workflow: saved, applied, turned on or off, or
+    /// deleted. The running version is whatever is saved now.
+    pub fn reload(&self, workflow_id: &str) {
+        let inner = &self.inner;
+        let _reloading = inner.reloading();
+        let carrying_on = inner.turn_on_or_off(workflow_id) == Some(false);
+        inner.ports.watcher.watch(&inner.intake.folders());
+        if carrying_on {
+            Inner::take(inner, workflow_id);
+        }
+    }
+
+    /// Something changed at these paths: looks for new files in every
+    /// watched folder they touch, and queues a run for each.
+    pub fn folders_changed(&self, paths: &[PathBuf]) {
+        let inner = &self.inner;
+        for id in inner.intake.touched_by(paths) {
+            Inner::take(inner, &id);
+        }
+    }
+
+    /// Queues a run of each scheduled workflow that is due.
+    pub fn check_schedules(&self) {
+        self.inner.check_schedules();
     }
 
     /// Queues one run of the saved workflow per file, and returns them queued.
@@ -172,26 +261,9 @@ impl Engine {
 
         let mut queued = Vec::new();
         for file in files {
-            let run = Run {
-                id: uuid::Uuid::new_v4().to_string(),
-                workflow_id: workflow.id.clone(),
-                revision: workflow.revision,
-                workflow: workflow.clone(),
-                trigger: RunTrigger {
-                    kind: TriggerKind::RunNow,
-                    file: Some(file.clone()),
-                },
-                file: Some(file),
-                undo: None,
-                status: RunStatus::Queued,
-                started_at: inner.ports.now(),
-                ended_at: None,
-                steps: Vec::new(),
-                values: Default::default(),
-                error: None,
-            };
-            inner.runs.save(&run).map_err(history_error)?;
-            inner.announce(&run);
+            let run = inner
+                .queued(&workflow, TriggerKind::RunNow, Some(file))
+                .map_err(history_error)?;
             queued.push(run);
         }
         for run in &queued {
@@ -220,8 +292,13 @@ impl Engine {
             }
         }
         let inner = &self.inner;
-        let report = files::undo(&inner.journal, &run.id, inner.ports.trash.as_ref())
-            .map_err(|e| ApiError::new(ErrorCode::Io, format!("Couldn't undo the run: {e}.")))?;
+        let report = files::undo(
+            &inner.journal,
+            &run.id,
+            inner.ports.trash.as_ref(),
+            inner.intake.as_ref(),
+        )
+        .map_err(|e| ApiError::new(ErrorCode::Io, format!("Couldn't undo the run: {e}.")))?;
         run.status = RunStatus::Undone;
         run.undo = Some(report.clone());
         inner.runs.save(&run).map_err(history_error)?;
@@ -271,6 +348,146 @@ impl Engine {
 }
 
 impl Inner {
+    fn reloading(&self) -> MutexGuard<'_, ()> {
+        lock(&self.reloading)
+    }
+
+    /// Starts or stops watching and scheduling for a workflow, to match its
+    /// saved file. Returns whether a File added workflow is on and carries on
+    /// from its record (`Some(false)`), is newly on with the files there now
+    /// left alone (`Some(true)`), or isn't watching (`None`).
+    fn turn_on_or_off(&self, id: &str) -> Option<bool> {
+        let workflow = match self.workflows.get(id) {
+            Ok(workflow) => Some(workflow),
+            Err(WorkflowError::NotFound | WorkflowError::InvalidId) => {
+                self.report(id, self.intake.forget(id));
+                self.report(id, lock(&self.schedules).turn_off(id));
+                return None;
+            }
+            Err(_) => None,
+        };
+        let trigger = workflow
+            .as_ref()
+            .filter(|w| w.enabled)
+            .and_then(|w| w.steps.iter().find(|s| s.kind.is_trigger()))
+            .map(|s| &s.kind);
+
+        let watch = match trigger {
+            Some(StepKind::FileAdded {
+                folder,
+                subfolders,
+                file_types,
+                ..
+            }) => expand_home(folder, &self.home).map(|folder| Watch {
+                folder: fs::canonicalize(&folder).unwrap_or(folder),
+                subfolders: *subfolders,
+                file_types: file_types.iter().map(|t| t.to_lowercase()).collect(),
+            }),
+            _ => None,
+        };
+        let mut fresh = None;
+        match watch {
+            Some(watch) => match self.intake.turn_on(id, watch) {
+                Ok(f) => fresh = Some(f),
+                Err(e) => self.report(id, Err(e)),
+            },
+            None => self.report(id, self.intake.turn_off(id)),
+        }
+
+        let mut schedules = lock(&self.schedules);
+        match trigger {
+            Some(StepKind::Schedule { schedule, .. }) => {
+                let now = self.ports.clock.now().with_timezone(&Local);
+                self.report(id, schedules.turn_on(id, schedule, &now));
+            }
+            _ => self.report(id, schedules.turn_off(id)),
+        }
+        fresh
+    }
+
+    fn report(&self, id: &str, result: io::Result<()>) {
+        if let Err(e) = result {
+            eprintln!("folderflow: couldn't update the records of workflow {id}: {e}");
+        }
+    }
+
+    /// Queues a run for each new file in a watched workflow's folder.
+    fn take(this: &Arc<Self>, id: &str) {
+        let files = match this.intake.take(id) {
+            Ok(files) => files,
+            Err(e) => {
+                eprintln!("folderflow: couldn't look for new files for workflow {id}: {e}");
+                return;
+            }
+        };
+        if files.is_empty() {
+            return;
+        }
+        let Ok(workflow) = this.workflows.get(id) else {
+            return;
+        };
+        for file in files {
+            match this.queued(&workflow, TriggerKind::FileAdded, Some(file)) {
+                Ok(run) => Inner::enqueue(this, id, &run.id),
+                Err(e) => eprintln!("folderflow: couldn't queue a run: {e}"),
+            }
+        }
+    }
+
+    fn check_schedules(self: &Arc<Self>) {
+        let now = self.ports.clock.now().with_timezone(&Local);
+        let due = match lock(&self.schedules).due(&now) {
+            Ok(due) => due,
+            Err(e) => {
+                eprintln!("folderflow: couldn't update the schedules: {e}");
+                return;
+            }
+        };
+        for id in due {
+            let Ok(workflow) = self.workflows.get(&id) else {
+                continue;
+            };
+            if !workflow.enabled {
+                continue;
+            }
+            match self.queued(&workflow, TriggerKind::Schedule, None) {
+                Ok(run) => Inner::enqueue(self, &id, &run.id),
+                Err(e) => eprintln!("folderflow: couldn't queue a run: {e}"),
+            }
+        }
+    }
+
+    /// Saves a new queued run of `workflow` and tells the window. The caller
+    /// hands it to the queue.
+    fn queued(
+        &self,
+        workflow: &Workflow,
+        kind: TriggerKind,
+        file: Option<RunFile>,
+    ) -> io::Result<Run> {
+        let run = Run {
+            id: uuid::Uuid::new_v4().to_string(),
+            workflow_id: workflow.id.clone(),
+            revision: workflow.revision,
+            workflow: workflow.clone(),
+            trigger: RunTrigger {
+                kind,
+                file: file.clone(),
+            },
+            file,
+            undo: None,
+            status: RunStatus::Queued,
+            started_at: self.ports.now(),
+            ended_at: None,
+            steps: Vec::new(),
+            values: Default::default(),
+            error: None,
+        };
+        self.runs.save(&run)?;
+        self.announce(&run);
+        Ok(run)
+    }
+
     fn announce(&self, run: &Run) {
         self.ports.events.run_changed(RunChanged {
             run_id: run.id.clone(),
@@ -306,8 +523,10 @@ impl Inner {
             run.file.as_ref().map(|f| f.path.as_path()),
             &self.home,
         );
+        let writes: Arc<dyn Writes> = self.intake.clone();
         let result = match Files::open(&self.journal, &run.id, grants) {
             Ok(files) => {
+                let files = files.telling(writes);
                 let mut ctx = runner::Ctx {
                     home: &self.home,
                     ports: &self.ports,
@@ -357,6 +576,30 @@ impl Inner {
             .notifier
             .notify(&run.workflow.name, &format!("{step} failed{on}: {message}"));
     }
+}
+
+/// Wakes the scheduled workflows at their times, until the engine is gone.
+async fn keep_time(engine: Weak<Inner>) {
+    loop {
+        let nap = {
+            let Some(inner) = engine.upgrade() else {
+                return;
+            };
+            let now = inner.ports.clock.now().with_timezone(&Local);
+            let next = lock(&inner.schedules).next(&now);
+            next.and_then(|next| (next - now).to_std().ok())
+                .map_or(SCHEDULE_NAP, |until| until.min(SCHEDULE_NAP))
+        };
+        tokio::time::sleep(nap.max(Duration::from_millis(500))).await;
+        let Some(inner) = engine.upgrade() else {
+            return;
+        };
+        inner.check_schedules();
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Runs a workflow's queued runs one at a time, until the engine is gone.

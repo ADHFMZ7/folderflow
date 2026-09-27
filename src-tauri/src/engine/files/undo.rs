@@ -10,7 +10,7 @@ use ts_rs::TS;
 
 use super::journal::{self, Action, Entry, Journal, State};
 use super::sys::{self, Stamp};
-use super::{claim, copy_bytes, file_name, numbered, part_path, split, Trash, MAX_NUMBER};
+use super::{claim, copy_bytes, file_name, numbered, part_path, split, Trash, Writes, MAX_NUMBER};
 
 /// What undoing a run did.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, serde::Deserialize, TS)]
@@ -33,8 +33,14 @@ pub struct LeftAlone {
 
 /// Reverses a run's actions, newest first. A file changed since the run (by
 /// inode, size or modification time) is left as it is and listed. Files the
-/// run made go to the Trash. Undoing again reverses nothing more.
-pub fn undo(journal_dir: &Path, run: &str, trash: &dyn Trash) -> io::Result<UndoReport> {
+/// run made go to the Trash. Undoing again reverses nothing more. `writes`
+/// hears of each file put back.
+pub fn undo(
+    journal_dir: &Path,
+    run: &str,
+    trash: &dyn Trash,
+    writes: &dyn Writes,
+) -> io::Result<UndoReport> {
     let entries = journal::read(&journal::path(journal_dir, run))?;
     let mut journal = Journal::open(journal_dir, run)?;
     let mut report = UndoReport::default();
@@ -45,7 +51,7 @@ pub fn undo(journal_dir: &Path, run: &str, trash: &dyn Trash) -> io::Result<Undo
         let State::Done { stamp, added } = &entry.state else {
             continue;
         };
-        match reverse(&entry.action, *stamp, added, trash, &mut ours) {
+        match reverse(&entry.action, *stamp, added, trash, writes, &mut ours) {
             Ok(Reversed::Counted) => {
                 report.restored += 1;
                 journal.undone(entry.seq)?;
@@ -73,6 +79,7 @@ fn reverse(
     stamp: Option<Stamp>,
     added: &[String],
     trash: &dyn Trash,
+    writes: &dyn Writes,
     ours: &mut HashMap<PathBuf, Stamp>,
 ) -> Result<Reversed, Refusal> {
     let unchanged = |path: &Path| {
@@ -98,7 +105,7 @@ fn reverse(
                     format!("{name} {why}, so it wasn't moved back."),
                 ));
             }
-            let back = move_back(to, from)
+            let back = move_back(to, from, writes)
                 .map_err(|e| (to.clone(), format!("{name} couldn't be moved back: {e}.")))?;
             remember(ours, back);
             Ok(Reversed::Counted)
@@ -117,7 +124,10 @@ fn reverse(
             match backup {
                 None => to_trash(path, true, trash),
                 Some(backup) => {
-                    restore(backup, path).map_err(|e| {
+                    writes.writing(path);
+                    let restored = restore(backup, path);
+                    writes.finished(path, restored.is_ok());
+                    restored.map_err(|e| {
                         (
                             path.clone(),
                             format!("The row couldn't be taken out of {name}: {e}."),
@@ -167,33 +177,40 @@ fn remember(ours: &mut HashMap<PathBuf, Stamp>, path: PathBuf) {
 
 /// Moves `from` back to `to`, or to `to` numbered if that name is taken now.
 /// Returns where it went.
-fn move_back(from: &Path, to: &Path) -> io::Result<PathBuf> {
+fn move_back(from: &Path, to: &Path, writes: &dyn Writes) -> io::Result<PathBuf> {
     let folder = to.parent().expect("a file path");
     fs::create_dir_all(folder)?;
     let (stem, ext) = split(&file_name(to));
     for n in 1..=MAX_NUMBER {
         let target = folder.join(numbered(&stem, ext.as_deref(), n));
-        match sys::rename_new(from, &target) {
+        writes.writing(&target);
+        let moved = move_to(from, &target, folder);
+        writes.finished(&target, moved.is_ok());
+        match moved {
             Ok(()) => return Ok(target),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {
-                let part = part_path(folder, &target);
-                copy_bytes(from, &part)?;
-                match claim(&part, &target) {
-                    Ok(()) => return fs::remove_file(from).map(|()| target),
-                    Err(e) => {
-                        let _ = fs::remove_file(&part);
-                        if e.kind() == io::ErrorKind::AlreadyExists {
-                            continue;
-                        }
-                        return Err(e);
-                    }
-                }
-            }
             Err(e) => return Err(e),
         }
     }
     Err(io::Error::other("every numbered name is taken"))
+}
+
+/// One try at moving `from` to `target`, which mustn't be taken.
+fn move_to(from: &Path, target: &Path, folder: &Path) -> io::Result<()> {
+    match sys::rename_new(from, target) {
+        Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {
+            let part = part_path(folder, target);
+            copy_bytes(from, &part)?;
+            match claim(&part, target) {
+                Ok(()) => fs::remove_file(from),
+                Err(e) => {
+                    let _ = fs::remove_file(&part);
+                    Err(e)
+                }
+            }
+        }
+        other => other,
+    }
 }
 
 /// Puts a spreadsheet back as it was, in one swap.
@@ -206,15 +223,29 @@ fn restore(backup: &Path, path: &Path) -> io::Result<()> {
     sys::sync_dir(folder)
 }
 
+/// What `recover_all` settled.
+#[derive(Debug, Default)]
+pub struct Recovered {
+    /// The runs that had actions a crash left half-known; each was cut off mid-run.
+    pub runs: Vec<String>,
+    /// Where those actions put, or may have put, a file.
+    pub touched: Vec<PathBuf>,
+}
+
 /// Settles every action a crash left half-known: done if the disk shows it
 /// happened, not done if it didn't, and temporary files removed. A move to
 /// another disk whose copy was in place is finished. Returns the runs that
-/// had such actions; each was cut off mid-run.
+/// had such actions.
 pub fn recover(journal_dir: &Path) -> io::Result<Vec<String>> {
-    let mut runs = Vec::new();
+    recover_all(journal_dir).map(|r| r.runs)
+}
+
+/// `recover`, also saying where the settled actions put files.
+pub fn recover_all(journal_dir: &Path) -> io::Result<Recovered> {
+    let mut out = Recovered::default();
     let listed = match fs::read_dir(journal_dir) {
         Ok(listed) => listed,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(runs),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(out),
         Err(e) => return Err(e),
     };
     for item in listed {
@@ -236,16 +267,18 @@ pub fn recover(journal_dir: &Path) -> io::Result<Vec<String>> {
         }
         let mut journal = Journal::open(journal_dir, &run)?;
         for entry in pending {
+            out.touched
+                .extend(entry.action.target().map(Path::to_path_buf));
             let placed = matches!(entry.state, State::Pending { placed: true });
             match settle(&entry.action, placed) {
                 Some((stamp, added)) => journal.done(entry.seq, stamp, added)?,
                 None => journal.not_done(entry.seq)?,
             }
         }
-        runs.push(run);
+        out.runs.push(run);
     }
-    runs.sort();
-    Ok(runs)
+    out.runs.sort();
+    Ok(out)
 }
 
 /// Whether the action happened, judged from the disk, with what done records.

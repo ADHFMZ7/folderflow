@@ -1,5 +1,5 @@
-//! The engine's ports in the running app: the Mac's notifications, and Tauri
-//! events to the window.
+//! The engine's ports in the running app: the Mac's notifications, the Trash,
+//! folder watching with FSEvents, and Tauri events to the window.
 //!
 //! Notifications use NSUserNotificationCenter, which Apple deprecates in favour
 //! of UserNotifications. That framework works only inside an app bundle, and
@@ -14,10 +14,16 @@ use objc2_foundation::{
     NSFileManager, NSString, NSUserNotification, NSUserNotificationCenter,
     NSUserNotificationCenterDelegate, NSURL,
 };
+use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::Duration;
+
+use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 use tauri::{AppHandle, Emitter};
+use tokio::sync::mpsc;
 
 use super::files::Trash;
-use super::{EngineEvents, Notifier, RunChanged};
+use super::{Engine, EngineEvents, Notifier, RunChanged, Watcher};
 
 /// The Mac's Trash, where Finder's "Put Back" can restore from.
 pub struct AppTrash;
@@ -110,5 +116,69 @@ pub struct AppEvents(pub AppHandle);
 impl EngineEvents for AppEvents {
     fn run_changed(&self, change: RunChanged) {
         let _ = self.0.emit("run-changed", change);
+    }
+}
+
+/// Watches folders with FSEvents, sending each changed path down a channel
+/// for `forward_changes`.
+pub struct AppWatcher {
+    watching: Mutex<(RecommendedWatcher, Vec<(PathBuf, bool)>)>,
+}
+
+impl AppWatcher {
+    pub fn new(changes: mpsc::UnboundedSender<PathBuf>) -> notify::Result<Self> {
+        let watcher =
+            notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
+                Ok(event) => {
+                    for path in event.paths {
+                        let _ = changes.send(path);
+                    }
+                }
+                Err(e) => eprintln!("folderflow: folder watching: {e}"),
+            })?;
+        Ok(Self {
+            watching: Mutex::new((watcher, Vec::new())),
+        })
+    }
+}
+
+impl Watcher for AppWatcher {
+    fn watch(&self, folders: &[(PathBuf, bool)]) {
+        let mut guard = self.watching.lock().unwrap_or_else(|e| e.into_inner());
+        let (watcher, watching) = &mut *guard;
+        for old in watching.iter().filter(|w| !folders.contains(w)) {
+            let _ = watcher.unwatch(&old.0);
+        }
+        for new in folders.iter().filter(|f| !watching.contains(f)) {
+            let mode = if new.1 {
+                RecursiveMode::Recursive
+            } else {
+                RecursiveMode::NonRecursive
+            };
+            if let Err(e) = watcher.watch(&new.0, mode) {
+                eprintln!("folderflow: couldn't watch {}: {e}", new.0.display());
+            }
+        }
+        *watching = folders.to_vec();
+    }
+}
+
+/// How long to gather changes before looking: a download or a copy of many
+/// files comes as a burst.
+const GATHER: Duration = Duration::from_secs(1);
+
+/// Hands folder changes to the engine: a second after the first of a burst,
+/// all together.
+pub async fn forward_changes(engine: Engine, mut changes: mpsc::UnboundedReceiver<PathBuf>) {
+    while let Some(first) = changes.recv().await {
+        let mut paths = vec![first];
+        let until = tokio::time::Instant::now() + GATHER;
+        while let Ok(Some(path)) = tokio::time::timeout_at(until, changes.recv()).await {
+            paths.push(path);
+        }
+        paths.sort();
+        paths.dedup();
+        let engine = engine.clone();
+        let _ = tokio::task::spawn_blocking(move || engine.folders_changed(&paths)).await;
     }
 }

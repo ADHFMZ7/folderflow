@@ -1,5 +1,6 @@
-//! Helpers for the engine tests: an engine on a temp data folder, with a fixed
-//! clock, and notifications and window events recorded instead of shown.
+//! Helpers for the engine tests: an engine on a temp data folder, with a clock
+//! the test sets, notifications and window events recorded instead of shown,
+//! and folder changes told to the engine by the test.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,7 +9,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset};
 use folderflow_lib::engine::runs::{Run, RunStatus};
-use folderflow_lib::engine::{Clock, Engine, EngineEvents, Notifier, Ports, RunChanged};
+use folderflow_lib::engine::{Clock, Engine, EngineEvents, Notifier, Ports, RunChanged, Watcher};
 use folderflow_lib::storage::data_dir::DataDir;
 use folderflow_lib::storage::workflows::WorkflowStore;
 use folderflow_lib::workflow::Workflow;
@@ -27,6 +28,11 @@ pub struct TickingClock(Mutex<DateTime<FixedOffset>>);
 impl TickingClock {
     pub fn new() -> Self {
         Self(Mutex::new(DateTime::parse_from_rfc3339(NOW).unwrap()))
+    }
+
+    /// Jumps to `time`, as the Mac waking from sleep does.
+    pub fn set(&self, time: DateTime<FixedOffset>) {
+        *self.0.lock().unwrap() = time;
     }
 }
 
@@ -79,6 +85,16 @@ impl EngineEvents for Events {
     }
 }
 
+/// The folders the engine last asked to watch.
+#[derive(Default)]
+pub struct Watched(pub Mutex<Vec<(PathBuf, bool)>>);
+
+impl Watcher for Watched {
+    fn watch(&self, folders: &[(PathBuf, bool)]) {
+        *self.0.lock().unwrap() = folders.to_vec();
+    }
+}
+
 pub struct EngineHarness {
     pub _tmp: tempfile::TempDir,
     /// The data folder.
@@ -86,6 +102,8 @@ pub struct EngineHarness {
     /// Stands in for the home folder; `~/` paths resolve here.
     pub home: PathBuf,
     pub notes: Arc<Notes>,
+    pub clock: Arc<TickingClock>,
+    pub watched: Arc<Watched>,
     pub events: mpsc::UnboundedReceiver<RunChanged>,
     pub engine: Engine,
 }
@@ -104,25 +122,40 @@ pub fn engine_with(notes: Notes) -> EngineHarness {
 
 /// Starts an engine on a data folder, as the app does at launch.
 pub fn start(tmp: tempfile::TempDir, dir: DataDir, home: PathBuf, notes: Notes) -> EngineHarness {
+    start_at(tmp, dir, home, notes, Arc::new(TickingClock::new()))
+}
+
+fn start_at(
+    tmp: tempfile::TempDir,
+    dir: DataDir,
+    home: PathBuf,
+    notes: Notes,
+    clock: Arc<TickingClock>,
+) -> EngineHarness {
     let root = dir.root().to_path_buf();
     let notes = Arc::new(notes);
+    let watched = Arc::new(Watched::default());
     let (tx, rx) = mpsc::unbounded_channel();
     let engine = Engine::new(
         &dir,
         home.clone(),
         Ports {
-            clock: Arc::new(TickingClock::new()),
+            clock: clock.clone(),
             notifier: notes.clone(),
             events: Arc::new(Events(tx)),
             trash: Arc::new(FolderTrash(home.parent().unwrap().join("trash"))),
+            watcher: watched.clone(),
         },
     )
     .unwrap();
+    engine.start();
     EngineHarness {
         _tmp: tmp,
         root,
         home,
         notes,
+        clock,
+        watched,
         events: rx,
         engine,
     }
@@ -143,6 +176,80 @@ impl EngineHarness {
         WorkflowStore::new(&DataDir::open(&self.root).unwrap())
             .create(workflow)
             .unwrap()
+    }
+
+    /// Saves the workflow on or off, as the switch in the app does.
+    pub fn switch(&self, workflow: &Workflow, on: bool) -> Workflow {
+        let store = WorkflowStore::new(&DataDir::open(&self.root).unwrap());
+        let current = store.get(&workflow.id).unwrap();
+        let saved = store
+            .save(
+                Workflow {
+                    enabled: on,
+                    ..current
+                },
+                &Default::default(),
+            )
+            .unwrap()
+            .workflow;
+        self.engine.reload(&saved.id);
+        saved
+    }
+
+    /// Saves a changed workflow, as the editor does.
+    pub fn save(&self, workflow: Workflow) -> Workflow {
+        let store = WorkflowStore::new(&DataDir::open(&self.root).unwrap());
+        let revision = store.get(&workflow.id).unwrap().revision;
+        let saved = store
+            .save(
+                Workflow {
+                    revision,
+                    ..workflow
+                },
+                &Default::default(),
+            )
+            .unwrap()
+            .workflow;
+        self.engine.reload(&saved.id);
+        saved
+    }
+
+    /// Tells the engine something changed in `rel`, as FSEvents would.
+    pub fn changed(&self, rel: &str) {
+        self.engine
+            .folders_changed(&[self.home.join(rel.trim_end_matches('/'))]);
+    }
+
+    /// Every run so far, oldest first.
+    pub fn runs(&self) -> Vec<Run> {
+        let mut runs: Vec<Run> = self
+            .engine
+            .list_runs(Default::default())
+            .unwrap()
+            .into_iter()
+            .map(|r| self.engine.get_run(&r.id).unwrap())
+            .collect();
+        runs.reverse();
+        runs
+    }
+
+    /// Waits until every run has finished, and returns them all, oldest first.
+    pub async fn settle(&mut self) -> Vec<Run> {
+        let wait = async {
+            loop {
+                let runs = self.runs();
+                if runs
+                    .iter()
+                    .all(|r| !matches!(r.status, RunStatus::Queued | RunStatus::Running))
+                {
+                    return runs;
+                }
+                self.events.recv().await.expect("the engine stopped");
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), wait)
+            .await
+            .expect("runs never finished")
     }
 
     /// A file in the home folder, returned as the `~/` path a picker gives.
@@ -178,10 +285,17 @@ impl EngineHarness {
             root,
             home,
             engine,
+            clock,
             ..
         } = self;
         drop(engine);
-        start(_tmp, DataDir::open(&root).unwrap(), home, Notes::default())
+        start_at(
+            _tmp,
+            DataDir::open(&root).unwrap(),
+            home,
+            Notes::default(),
+            clock,
+        )
     }
 
     pub fn trash_dir(&self) -> PathBuf {

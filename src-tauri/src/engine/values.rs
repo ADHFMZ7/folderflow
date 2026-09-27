@@ -128,6 +128,20 @@ pub fn file_values(path: &Path, home: &Path, added: DateTime<FixedOffset>) -> Va
     ])
 }
 
+/// What a Schedule trigger gives: `{date}` and `{year}`.
+pub fn schedule_values(at: DateTime<FixedOffset>) -> Values {
+    Values::from([
+        (
+            "date".into(),
+            value(ValueKind::Date, at.format("%Y-%m-%d").to_string()),
+        ),
+        (
+            "year".into(),
+            value(ValueKind::Number, at.year().to_string()),
+        ),
+    ])
+}
+
 /// Whether `left op right` holds. Both sides are compared as numbers when
 /// both read as numbers, as dates when both read as `YYYY-MM-DD`, and
 /// otherwise as text, ignoring case and outer spaces.

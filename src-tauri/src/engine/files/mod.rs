@@ -20,17 +20,36 @@ mod undo;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use journal::{Action, Journal};
 use sys::Stamp;
 
 use crate::workflow::{paths, validate::variables_in, StepKind, Workflow};
 
-pub use undo::{recover, undo, LeftAlone, UndoReport};
+pub use undo::{recover, recover_all, undo, LeftAlone, Recovered, UndoReport};
 
 /// Moves files to the Trash. Behind a trait so tests keep their own.
 pub trait Trash: Send + Sync {
     fn trash(&self, path: &Path) -> io::Result<()>;
+}
+
+/// Hears of every file FolderFlow is about to put somewhere and whether it
+/// did, so a workflow watching that folder doesn't take it for a new file
+/// (docs/engine.md, decision 8).
+pub trait Writes: Send + Sync {
+    /// Before a file is put at `path`.
+    fn writing(&self, path: &Path);
+    /// After: `written` is whether FolderFlow's file is at `path` now.
+    fn finished(&self, path: &Path, written: bool);
+}
+
+/// For when nothing is watching.
+pub struct NoWrites;
+
+impl Writes for NoWrites {
+    fn writing(&self, _: &Path) {}
+    fn finished(&self, _: &Path, _: bool) {}
 }
 
 /// Why a file action didn't happen, in plain words.
@@ -184,6 +203,7 @@ pub struct Files {
     grants: Grants,
     journal: Journal,
     backups: PathBuf,
+    writes: Arc<dyn Writes>,
     crash: Option<CrashPoint>,
 }
 
@@ -204,8 +224,15 @@ impl Files {
             journal: Journal::open(journal_dir, run)?,
             backups: journal::backups(journal_dir, run),
             grants,
+            writes: Arc::new(NoWrites),
             crash: None,
         })
+    }
+
+    /// Tells `writes` of every file these actions put somewhere.
+    pub fn telling(mut self, writes: Arc<dyn Writes>) -> Files {
+        self.writes = writes;
+        self
     }
 
     #[doc(hidden)]
@@ -525,6 +552,7 @@ impl Files {
             .journal
             .intent(action)
             .map_err(|e| io_error(&name, "move", e))?;
+        self.writes.writing(to);
         let placed = (|| {
             copy_bytes(from, &part)?;
             claim(&part, to)?;
@@ -535,9 +563,11 @@ impl Files {
         })();
         if let Err(e) = placed {
             let _ = fs::remove_file(&part);
+            self.writes.finished(to, false);
             let _ = self.journal.not_done(seq);
             return Err(io_error(&name, "move", e));
         }
+        self.writes.finished(to, true);
         let finish = self
             .journal
             .placed(seq)
@@ -604,19 +634,26 @@ impl Files {
             Action::Create { part, .. } | Action::AddRow { part, .. } => Some(part.clone()),
             _ => None,
         };
+        let target = action.target().map(Path::to_path_buf);
         let seq = self.journal.intent(action).map_err(Failed::Io)?;
         if self.crash == Some(CrashPoint::AfterIntent) {
             return Err(Failed::Crashed);
         }
-        match act() {
-            Ok(did) => {
-                if self.crash == Some(CrashPoint::BeforeDone) {
-                    return Err(Failed::Crashed);
-                }
-                self.journal
-                    .done(seq, did.stamp, did.added)
-                    .map_err(Failed::Io)
-            }
+        if let Some(target) = &target {
+            self.writes.writing(target);
+        }
+        let result = act();
+        if result.is_ok() && self.crash == Some(CrashPoint::BeforeDone) {
+            return Err(Failed::Crashed);
+        }
+        if let Some(target) = &target {
+            self.writes.finished(target, result.is_ok());
+        }
+        match result {
+            Ok(did) => self
+                .journal
+                .done(seq, did.stamp, did.added)
+                .map_err(Failed::Io),
             Err(e) => {
                 if let Some(part) = part {
                     let _ = fs::remove_file(part);

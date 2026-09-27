@@ -135,6 +135,14 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
                 ..Done::next(next)
             })
         }
+        StepKind::Schedule { next, .. } => {
+            let at = chrono::DateTime::parse_from_rfc3339(&run.started_at)
+                .map_err(|_| "This run's start time can't be read.")?;
+            Ok(Done {
+                values: values::schedule_values(at),
+                ..Done::next(next)
+            })
+        }
         StepKind::If {
             condition,
             branches,

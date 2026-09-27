@@ -10,7 +10,7 @@ use tauri::Manager;
 use api::commands;
 use api::providers::HttpProviders;
 use api::Backend;
-use engine::app::{AppEvents, AppNotifier, AppTrash};
+use engine::app::{forward_changes, AppEvents, AppNotifier, AppTrash, AppWatcher};
 use engine::{Engine, Ports, SystemClock};
 use storage::data_dir::DataDir;
 use storage::secrets::KeychainStore;
@@ -24,6 +24,7 @@ pub fn run() {
             let dir = DataDir::open(app.path().app_data_dir()?)?;
             // Keys go in the Keychain under the bundle id, com.adhfmz7.folderflow.
             let secrets = Arc::new(KeychainStore::new(app.config().identifier.clone()));
+            let (changes, changed) = tokio::sync::mpsc::unbounded_channel();
             let engine = Engine::new(
                 &dir,
                 app.path().home_dir()?,
@@ -32,8 +33,14 @@ pub fn run() {
                     notifier: Arc::new(AppNotifier::new(&app.config().identifier)),
                     events: Arc::new(AppEvents(app.handle().clone())),
                     trash: Arc::new(AppTrash),
+                    watcher: Arc::new(AppWatcher::new(changes)?),
                 },
             )?;
+            let started = engine.clone();
+            tauri::async_runtime::spawn(async move {
+                started.start();
+                forward_changes(started, changed).await;
+            });
             app.manage(engine);
             app.manage(Backend::new(dir, secrets, HttpProviders::default()));
             Ok(())
