@@ -17,17 +17,14 @@ async fn it_tells_of_changes_in_watched_folders_only() {
     watcher.watch(&[(folder.clone(), false)]);
     std::fs::write(folder.join("new.pdf"), b"x").unwrap();
 
-    let told = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let path = rx.recv().await.unwrap();
-            if path.starts_with(&folder) {
-                return path;
-            }
-        }
+    // FSEvents may first tell of the folder itself; the engine scans it
+    // either way, but the file's own event must come.
+    let new = folder.join("new.pdf");
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while rx.recv().await.unwrap() != new {}
     })
     .await
     .expect("FSEvents never told of the new file");
-    assert_eq!(told, folder.join("new.pdf"));
 
     watcher.watch(&[]);
     // Anything already on its way is drained; then a new file brings nothing.
