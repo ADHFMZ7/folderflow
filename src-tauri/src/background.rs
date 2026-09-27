@@ -204,9 +204,8 @@ pub fn opened_at_login() -> bool {
 /// Adds or removes Vela's login item to match the setting. Only
 /// Vela.app does: a development build would add its bare binary.
 pub fn open_at_login(app: &AppHandle, on: bool) {
-    match std::env::current_exe() {
-        Ok(exe) if in_app_bundle(&exe) => {}
-        _ => return,
+    if !in_app_bundle() {
+        return;
     }
     let launcher = app.autolaunch();
     if launcher.is_enabled().is_ok_and(|now| now == on) {
@@ -222,7 +221,12 @@ pub fn open_at_login(app: &AppHandle, on: bool) {
     }
 }
 
-fn in_app_bundle(exe: &Path) -> bool {
+/// Whether this is Vela.app, rather than a development build's bare binary.
+pub fn in_app_bundle() -> bool {
+    std::env::current_exe().is_ok_and(|exe| is_bundled(&exe))
+}
+
+fn is_bundled(exe: &Path) -> bool {
     exe.to_string_lossy().contains(".app/Contents/MacOS/")
 }
 
@@ -298,10 +302,10 @@ mod tests {
 
     #[test]
     fn only_an_app_bundle_changes_the_login_item() {
-        assert!(in_app_bundle(Path::new(
+        assert!(is_bundled(Path::new(
             "/Applications/Vela.app/Contents/MacOS/vela"
         )));
-        assert!(!in_app_bundle(Path::new(
+        assert!(!is_bundled(Path::new(
             "/Users/me/vela/src-tauri/target/debug/vela"
         )));
     }

@@ -42,7 +42,18 @@ pub fn run() {
                 app.path().home_dir()?,
                 Ports {
                     clock: Arc::new(SystemClock),
-                    notifier: Arc::new(AppNotifier::new(&app.config().identifier)),
+                    notifier: Arc::new(AppNotifier::new(
+                        &app.config().identifier,
+                        background::in_app_bundle(),
+                        {
+                            let handle = app.handle().clone();
+                            move || {
+                                let shown = handle.clone();
+                                let _ = handle
+                                    .run_on_main_thread(move || background::show_window(&shown));
+                            }
+                        },
+                    )),
                     events: Arc::new(AppEvents(app.handle().clone())),
                     trash: Arc::new(AppTrash),
                     watcher: Arc::new(AppWatcher::new(changes)?),

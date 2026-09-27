@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Merged into Vela.app's Info.plist by tauri build. Each text is what macOS
+     shows the first time Vela asks for that place. -->
+<dict>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Vela runs your workflows on the folders you choose, and needs your permission for folders on your Desktop.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Vela runs your workflows on the folders you choose, and needs your permission for folders in Documents.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Vela runs your workflows on the folders you choose, and needs your permission for your Downloads folder.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Vela runs your workflows on the folders you choose, and needs your permission for folders on external drives.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Vela runs your workflows on the folders you choose, and needs your permission for folders on network drives.</string>
+</dict>
+</plist>

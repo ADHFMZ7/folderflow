@@ -2,21 +2,28 @@
 //! folder watching with FSEvents, and Tauri events to the window and the
 //! menu bar icon.
 //!
-//! Notifications use NSUserNotificationCenter, which Apple deprecates in favour
-//! of UserNotifications. That framework works only inside an app bundle, and
-//! `tauri dev` runs a bare binary, so it would leave development builds silent.
-//! Revisit with the signed release build, where UserNotifications can be tested.
+//! Notifications use UserNotifications in Vela.app. That framework works only
+//! inside an app bundle, and `tauri dev` runs a bare binary, so development
+//! builds keep the deprecated NSUserNotificationCenter.
 #![allow(deprecated)]
 
+use block2::{DynBlock, RcBlock};
 use objc2::rc::Retained;
-use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
-use objc2::{define_class, msg_send, AllocAnyThread};
+use objc2::runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject};
+use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass};
 use objc2_foundation::{
-    NSFileManager, NSString, NSUserNotification, NSUserNotificationCenter,
+    NSError, NSFileManager, NSString, NSUserNotification, NSUserNotificationCenter,
     NSUserNotificationCenterDelegate, NSURL,
 };
+use objc2_user_notifications::{
+    UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
+    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
+    UNNotificationSettings, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
@@ -38,19 +45,58 @@ impl Trash for AppTrash {
     }
 }
 
-/// Notifications from Vela. They show as banners even while Vela
-/// is the front app, which macOS otherwise skips: a person who just chose Run
-/// is usually looking at Vela.
+/// Notifications from Vela. They show as banners even while Vela is the
+/// front app, which macOS otherwise skips: a person who just chose Run is
+/// usually looking at Vela. Clicking one calls `on_open`.
 pub struct AppNotifier {
-    /// Why notifications can't be shown at all, if they can't.
-    unavailable: Option<String>,
+    route: Route,
+}
+
+enum Route {
+    /// Vela.app: UserNotifications. `denied` is whether the person turned
+    /// Vela's notifications off, as last heard.
+    Bundle { denied: Arc<AtomicBool> },
+    /// A development build isn't an app bundle, which UserNotifications
+    /// needs: the older NSUserNotificationCenter, borrowing the bundle id.
+    /// `unavailable` is why it can't show them, if it can't.
+    Dev { unavailable: Option<String> },
 }
 
 impl AppNotifier {
-    /// Sends as the app with this bundle id. A development build isn't a bundle,
-    /// so it borrows the id, which macOS knows only once Vela.app has
-    /// been opened; until then every notification fails, and says why.
-    pub fn new(identifier: &str) -> Self {
+    /// For Vela.app (`in_bundle`), asks macOS for permission to notify the
+    /// first time; for a development build, borrows `identifier`.
+    pub fn new(
+        identifier: &str,
+        in_bundle: bool,
+        on_open: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
+        let route = if in_bundle {
+            Self::bundle(on_open)
+        } else {
+            Self::dev(identifier)
+        };
+        Self { route }
+    }
+
+    fn bundle(on_open: impl Fn() + Send + Sync + 'static) -> Route {
+        let center = UNUserNotificationCenter::currentNotificationCenter();
+        let delegate = Delegate::new(Box::new(on_open));
+        center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+        // The center holds its delegate weakly: keep it for the life of the app.
+        let _ = Retained::into_raw(delegate);
+        let denied = Arc::new(AtomicBool::new(false));
+        let heard = denied.clone();
+        let answered = RcBlock::new(move |granted: Bool, _error: *mut NSError| {
+            heard.store(!granted.as_bool(), Ordering::SeqCst);
+        });
+        center.requestAuthorizationWithOptions_completionHandler(
+            UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+            &answered,
+        );
+        Route::Bundle { denied }
+    }
+
+    fn dev(identifier: &str) -> Route {
         let unavailable = mac_notification_sys::set_application(identifier)
             .err()
             .map(|_| {
@@ -66,26 +112,104 @@ impl AppNotifier {
             }
             let _ = Retained::into_raw(presenter);
         }
-        Self { unavailable }
+        Route::Dev { unavailable }
     }
 }
 
 impl Notifier for AppNotifier {
     fn notify(&self, title: &str, body: &str) -> Result<(), String> {
-        if let Some(why) = &self.unavailable {
-            return Err(why.clone());
+        match &self.route {
+            Route::Bundle { denied } => {
+                let center = UNUserNotificationCenter::currentNotificationCenter();
+                // The person can turn notifications off at any time: look again
+                // for next time.
+                let heard = denied.clone();
+                let settings = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+                    // SAFETY: the center passes settings that live for the call.
+                    let status = unsafe { settings.as_ref() }.authorizationStatus();
+                    heard.store(status == UNAuthorizationStatus::Denied, Ordering::SeqCst);
+                });
+                center.getNotificationSettingsWithCompletionHandler(&settings);
+                if denied.load(Ordering::SeqCst) {
+                    return Err(
+                        "Notifications are off for Vela. Turn them on in System Settings › Notifications › Vela."
+                            .into(),
+                    );
+                }
+                let content = UNMutableNotificationContent::new();
+                content.setTitle(&NSString::from_str(title));
+                content.setBody(&NSString::from_str(body));
+                let id = NSString::from_str(&uuid::Uuid::new_v4().to_string());
+                let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
+                    &id, &content, None,
+                );
+                center.addNotificationRequest_withCompletionHandler(&request, None);
+                Ok(())
+            }
+            Route::Dev { unavailable } => {
+                if let Some(why) = unavailable {
+                    return Err(why.clone());
+                }
+                let notification = NSUserNotification::new();
+                notification.setTitle(Some(&NSString::from_str(title)));
+                notification.setInformativeText(Some(&NSString::from_str(body)));
+                NSUserNotificationCenter::defaultUserNotificationCenter()
+                    .deliverNotification(&notification);
+                Ok(())
+            }
         }
-        let notification = NSUserNotification::new();
-        notification.setTitle(Some(&NSString::from_str(title)));
-        notification.setInformativeText(Some(&NSString::from_str(body)));
-        NSUserNotificationCenter::defaultUserNotificationCenter()
-            .deliverNotification(&notification);
-        Ok(())
+    }
+}
+
+/// Called when the person clicks one of Vela's notifications.
+struct OnOpen(Box<dyn Fn() + Send + Sync>);
+
+define_class!(
+    /// Shows Vela's notifications while it's the front app, and opens Vela
+    /// when one is clicked (UserNotifications).
+    #[unsafe(super(NSObject))]
+    #[name = "VelaNotificationDelegate"]
+    #[ivars = OnOpen]
+    struct Delegate;
+
+    unsafe impl NSObjectProtocol for Delegate {}
+
+    unsafe impl UNUserNotificationCenterDelegate for Delegate {
+        #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
+        fn will_present(
+            &self,
+            _center: &UNUserNotificationCenter,
+            _notification: &UNNotification,
+            completion: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
+        ) {
+            completion
+                .call((UNNotificationPresentationOptions::Banner
+                    | UNNotificationPresentationOptions::List,));
+        }
+
+        #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
+        fn did_receive(
+            &self,
+            _center: &UNUserNotificationCenter,
+            _response: &UNNotificationResponse,
+            completion: &DynBlock<dyn Fn()>,
+        ) {
+            (self.ivars().0)();
+            completion.call(());
+        }
+    }
+);
+
+impl Delegate {
+    fn new(on_open: Box<dyn Fn() + Send + Sync>) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(OnOpen(on_open));
+        unsafe { msg_send![super(this), init] }
     }
 }
 
 define_class!(
-    /// Tells macOS to show every Vela notification, front app or not.
+    /// Tells macOS to show every Vela notification, front app or not
+    /// (NSUserNotificationCenter, for development builds).
     #[unsafe(super(NSObject))]
     #[name = "VelaNotificationPresenter"]
     struct Presenter;

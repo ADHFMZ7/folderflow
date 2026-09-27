@@ -22,6 +22,7 @@ export function SettingsPage() {
         </div>
         <Toggle label="Open Vela when I log in" checked={settings.openAtLogin} onChange={(openAtLogin) => update({ openAtLogin })} />
       </section>
+      <p className={styles.version}>Vela {__APP_VERSION__}</p>
     </div>
   );
 }

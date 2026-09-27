@@ -2859,7 +2859,10 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9df9128cbbfef73cda168416ccf7f837b62737d748333bfe9ab71c245d76613e"
 dependencies = [
+ "bitflags 2.13.2",
+ "block2",
  "objc2",
+ "objc2-core-location",
  "objc2-foundation",
 ]
 
@@ -5197,8 +5200,9 @@ dependencies = [
 
 [[package]]
 name = "vela"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
+ "block2",
  "chrono",
  "chrono-tz",
  "keyring",
@@ -5211,6 +5215,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-image-io",
  "objc2-pdf-kit",
+ "objc2-user-notifications",
  "objc2-vision",
  "plist",
  "proptest",

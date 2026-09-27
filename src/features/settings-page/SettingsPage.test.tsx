@@ -10,6 +10,12 @@ const connected = {
 };
 
 describe("settings page", () => {
+  it("says which version of Vela this is", async () => {
+    window.location.hash = "#/settings";
+    renderApp({ settings: connected });
+    expect(await screen.findByText(/^Vela \d+\.\d+\.\d+$/)).toBeInTheDocument();
+  });
+
   it("disconnects a provider after confirming, and its model stops being used", async () => {
     window.location.hash = "#/settings";
     const { user, api } = renderApp({ settings: connected });

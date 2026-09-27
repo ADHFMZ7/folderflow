@@ -2,3 +2,4 @@
 .section { display: flex; flex-direction: column; gap: var(--space-3); }
 .muted { color: var(--muted); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.version { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
