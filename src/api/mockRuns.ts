@@ -2,7 +2,7 @@
 // (src-tauri/src/engine), for the steps the core can run so far. File steps
 // change nothing, since there are no files; they record what they would do.
 
-import type { ConditionOp, NeedsYouItem, Run, RunSummary, RunValue, Step, StepRun, Workflow } from "./types";
+import type { ConditionOp, NeedsYouItem, NoticeKind, Run, RunSummary, RunValue, Step, StepRun, Workflow } from "./types";
 
 const NAMES: Record<Step["type"], string> = {
   fileAdded: "File added", schedule: "Schedule", runNow: "Run now", classify: "Classify", extract: "Extract",
@@ -109,7 +109,7 @@ export function after(workflow: Workflow, stepId: string, branch: string | null)
 
 /** Runs `run` to its end or its next question, changing it in place. It starts
     at `continueAt` when a run carries on, otherwise at the trigger. */
-export function execute(run: Run, workflow: Workflow, notify: (title: string, body: string) => void) {
+export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, message: string) => void) {
   const now = () => new Date().toISOString();
   let current = run.continueAt ?? workflow.steps.find((s) => s.type === "fileAdded" || s.type === "runNow")?.id ?? null;
   run.continueAt = null;
@@ -137,7 +137,7 @@ export function execute(run: Run, workflow: Workflow, notify: (title: string, bo
         break;
       }
       case "notify":
-        notify(workflow.name, fill(step.message, run.values));
+        tell("message", fill(step.message, run.values));
         current = step.next;
         break;
       case "stop":
@@ -147,7 +147,7 @@ export function execute(run: Run, workflow: Workflow, notify: (title: string, bo
         entry.outcome = "waiting";
         run.waitingFor = { stepId: step.id, question, answers: step.answers };
         run.status = "waiting";
-        notify(workflow.name, question);
+        tell("question", question);
         return;
       }
       case "rename": {
@@ -190,6 +190,8 @@ export function execute(run: Run, workflow: Workflow, notify: (title: string, bo
       entry.endedAt = now();
       run.error = { stepId: step.id, message };
       run.status = "failed";
+      const on = run.trigger.file ? ` on ${nameOf(run.trigger.file.path)}` : "";
+      tell("failed", `${step.title} failed${on}: ${message}`);
       run.endedAt = now();
       return;
     }

@@ -9,6 +9,7 @@
 pub mod app;
 pub mod files;
 pub mod intake;
+pub mod notices;
 mod runner;
 pub mod runs;
 pub mod schedule;
@@ -19,6 +20,7 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
 
@@ -35,6 +37,7 @@ use crate::storage::workflows::{WorkflowError, WorkflowStore};
 use crate::workflow::{validate, StepKind, Workflow};
 use files::{Files, Grants, Trash, Writes};
 use intake::{Intake, Watch};
+use notices::{Notice, NoticeKind, Notices};
 use runs::{
     NeedsYouItem, Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, StepOutcome,
     TriggerKind, UndoResult,
@@ -55,6 +58,8 @@ pub trait Notifier: Send + Sync {
 /// Tells the window something changed. Screens then ask for the details.
 pub trait EngineEvents: Send + Sync {
     fn run_changed(&self, change: RunChanged);
+    /// The notification list changed; `unread` is how many are unread now.
+    fn notices_changed(&self, _unread: u32) {}
 }
 
 /// Watches folders, and tells the engine of changes in them through
@@ -62,6 +67,16 @@ pub trait EngineEvents: Send + Sync {
 pub trait Watcher: Send + Sync {
     /// Watch exactly these folders from now on, each with its subfolders or not.
     fn watch(&self, folders: &[(PathBuf, bool)]);
+}
+
+/// What the title bar shows: whether workflows are paused, and how many runs
+/// are queued or running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Activity {
+    pub paused: bool,
+    pub running: u32,
 }
 
 /// The `run-changed` event.
@@ -130,6 +145,10 @@ struct Inner {
     reloading: Mutex<()>,
     /// What the workflow list shows without reading every run.
     index: Mutex<Index>,
+    notices: Notices,
+    /// Pause all: no new runs from folders or schedules. Kept in `paused_path`.
+    paused: AtomicBool,
+    paused_path: PathBuf,
     /// One queue per workflow, so its runs go one at a time, in order.
     queues: Mutex<HashMap<String, mpsc::UnboundedSender<String>>>,
 }
@@ -142,6 +161,11 @@ impl Engine {
     pub fn new(dir: &DataDir, home: PathBuf, ports: Ports) -> io::Result<Self> {
         let recovered = files::recover_all(&dir.journal_path())?;
         let engine_dir = dir.root().join("engine");
+        let notices = Notices::load(
+            engine_dir.join("notifications.json"),
+            ports.notifier.clone(),
+            ports.events.clone(),
+        );
         let inner = Inner {
             runs: RunStore::new(dir),
             workflows: WorkflowStore::new(dir),
@@ -154,6 +178,9 @@ impl Engine {
             recovered: Mutex::new(recovered.touched),
             reloading: Mutex::new(()),
             index: Mutex::new(Index::default()),
+            notices,
+            paused: AtomicBool::new(engine_dir.join("paused").exists()),
+            paused_path: engine_dir.join("paused"),
             queues: Mutex::new(HashMap::new()),
         };
         for mut run in inner.runs.all()? {
@@ -311,7 +338,61 @@ impl Engine {
         run.undo = Some(report.clone());
         inner.runs.save(&run).map_err(history_error)?;
         inner.announce(&run);
+        if !report.left_alone.is_empty() {
+            let n = report.left_alone.len();
+            let message = format!(
+                "Undo put back {} of this run's changes. {n} file{} changed since, so {} left alone.",
+                report.restored,
+                if n == 1 { "" } else { "s" },
+                if n == 1 { "it was" } else { "they were" },
+            );
+            let _ = inner
+                .notices
+                .tell(NoticeKind::Undo, &run, &message, inner.ports.now());
+        }
         Ok(UndoResult { run, report })
+    }
+
+    /// The notifications under the bell, newest first.
+    pub fn list_notices(&self) -> Vec<Notice> {
+        self.inner.notices.list()
+    }
+
+    /// Marks these notifications read, or all of them when `ids` is `None`.
+    pub fn mark_notices_read(&self, ids: Option<Vec<String>>) {
+        self.inner.notices.mark_read(ids.as_deref());
+    }
+
+    pub fn activity(&self) -> Activity {
+        Activity {
+            paused: self.inner.is_paused(),
+            running: lock(&self.inner.index).busy.len() as u32,
+        }
+    }
+
+    /// Pause all: while paused, new files wait and scheduled times are passed
+    /// over; runs already queued or running finish, and Run now still works.
+    /// Resuming looks in every watched folder at once, so files that arrived
+    /// meanwhile run.
+    pub fn pause_all(&self, paused: bool) -> Result<Activity, ApiError> {
+        let inner = &self.inner;
+        let saved = if paused {
+            fs::create_dir_all(inner.paused_path.parent().expect("in engine/"))
+                .and_then(|()| fs::write(&inner.paused_path, b""))
+        } else {
+            match fs::remove_file(&inner.paused_path) {
+                Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+                _ => Ok(()),
+            }
+        };
+        saved.map_err(|e| ApiError::new(ErrorCode::Io, format!("Couldn't save the pause: {e}")))?;
+        let was = inner.paused.swap(paused, Ordering::SeqCst);
+        if was && !paused {
+            let folders: Vec<PathBuf> =
+                inner.intake.folders().into_iter().map(|(f, _)| f).collect();
+            self.folders_changed(&folders);
+        }
+        Ok(self.activity())
     }
 
     /// Everything waiting on the person, newest first.
@@ -560,8 +641,12 @@ impl Inner {
         }
     }
 
-    /// Queues a run for each new file in a watched workflow's folder.
+    /// Queues a run for each new file in a watched workflow's folder. While
+    /// paused, the files wait: they aren't recorded, so resuming takes them.
     fn take(this: &Arc<Self>, id: &str) {
+        if this.is_paused() {
+            return;
+        }
         let files = match this.intake.take(id) {
             Ok(files) => files,
             Err(e) => {
@@ -583,6 +668,10 @@ impl Inner {
         }
     }
 
+    fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
+    }
+
     fn check_schedules(self: &Arc<Self>) {
         let now = self.ports.clock.now().with_timezone(&Local);
         let due = match lock(&self.schedules).due(&now) {
@@ -592,6 +681,10 @@ impl Inner {
                 return;
             }
         };
+        // Paused: the times count as checked, and pass by.
+        if self.is_paused() {
+            return;
+        }
         for id in due {
             let Ok(workflow) = self.workflows.get(&id) else {
                 continue;
@@ -683,6 +776,7 @@ impl Inner {
                 let mut ctx = runner::Ctx {
                     home: &self.home,
                     ports: &self.ports,
+                    notices: &self.notices,
                     files,
                 };
                 runner::run(&mut run, &mut ctx, |r| self.save(r)).await
@@ -697,7 +791,12 @@ impl Inner {
             Ok(runner::Ended::Waiting) => {
                 run.status = RunStatus::Waiting;
                 if let Some(q) = &run.waiting_for {
-                    let _ = self.ports.notifier.notify(&run.workflow.name, &q.question);
+                    let _ = self.notices.tell(
+                        NoticeKind::Question,
+                        &run,
+                        &q.question,
+                        self.ports.now(),
+                    );
                 }
             }
             Ok(runner::Ended::Done) => {
@@ -749,10 +848,12 @@ impl Inner {
             .file
             .map(|f| format!(" on {f}"))
             .unwrap_or_default();
-        let _ = self
-            .ports
-            .notifier
-            .notify(&run.workflow.name, &format!("{step} failed{on}: {message}"));
+        let _ = self.notices.tell(
+            NoticeKind::Failed,
+            run,
+            &format!("{step} failed{on}: {message}"),
+            self.ports.now(),
+        );
     }
 }
 
@@ -782,10 +883,17 @@ struct Index {
     /// Run id → workflow id.
     needs: std::collections::BTreeMap<String, String>,
     last: HashMap<String, RunSummary>,
+    /// Runs queued or running.
+    busy: std::collections::BTreeSet<String>,
 }
 
 impl Index {
     fn note(&mut self, run: &Run) {
+        if matches!(run.status, RunStatus::Queued | RunStatus::Running) {
+            self.busy.insert(run.id.clone());
+        } else {
+            self.busy.remove(&run.id);
+        }
         if run.needs_you().is_some() {
             self.needs.insert(run.id.clone(), run.workflow_id.clone());
         } else {

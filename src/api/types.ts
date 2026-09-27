@@ -247,5 +247,22 @@ export type RunSummary = {
 /** Every field narrows the list. `before` is a run id: the runs listed after it. `limit` defaults to 100. */
 export type RunQuery = { workflowId?: string; status?: RunStatus; before?: string; limit?: number };
 
+/** A notification under the bell; the same one goes to macOS. `runId` opens its run. */
+export type NoticeKind = "question" | "failed" | "message" | "undo";
+export type Notice = {
+  id: string;
+  kind: NoticeKind;
+  workflowId: string;
+  workflowName: string;
+  runId: string | null;
+  message: string;
+  /** RFC 3339. */
+  at: string;
+  read: boolean;
+};
+
+/** What the title bar shows: Pause all, and how many runs are queued or running. */
+export type Activity = { paused: boolean; running: number };
+
 /** The `run-changed` event. Screens ask for the details with getRun. */
 export type RunChanged = { runId: string; workflowId: string; status: RunStatus };

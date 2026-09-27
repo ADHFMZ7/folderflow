@@ -56,17 +56,25 @@ export function createTauriApi(): Api {
     resumeRun: (runId) => call("resume_run", { runId }),
     undoRun: (runId) => call("undo_run", { runId }),
     dismissRun: (runId) => call("dismiss_run", { runId }),
-    onRunChanged(listener) {
-      // listen() resolves later; a stop that comes first unlistens as soon as it does.
-      let stopped = false;
-      let unlisten: (() => void) | null = null;
-      listen<RunChanged>("run-changed", (event) => listener(event.payload)).then((fn) => {
-        if (stopped) fn();
-        else unlisten = fn;
-      }).catch(() => {});
-      return () => { stopped = true; unlisten?.(); };
-    },
+    onRunChanged: (listener) => subscribe<RunChanged>("run-changed", listener),
+    listNotices: () => call("list_notices"),
+    markNoticesRead: (ids) => call("mark_notices_read", { ids: ids ?? null }),
+    onNoticesChanged: (listener) => subscribe<number>("notices-changed", listener),
+    getActivity: () => call("get_activity"),
+    pauseAll: (paused) => call("pause_all", { paused }),
   };
+}
+
+/** Listens for a Tauri event until the returned function is called. listen()
+    resolves later; a stop that comes first unlistens as soon as it does. */
+function subscribe<T>(event: string, listener: (payload: T) => void): () => void {
+  let stopped = false;
+  let unlisten: (() => void) | null = null;
+  listen<T>(event, (e) => listener(e.payload)).then((fn) => {
+    if (stopped) fn();
+    else unlisten = fn;
+  }).catch(() => {});
+  return () => { stopped = true; unlisten?.(); };
 }
 
 export const inTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

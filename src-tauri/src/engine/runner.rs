@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use super::files::{sys::Stamp, Files};
+use super::notices::{NoticeKind, Notices};
 use super::runs::{Question, Run, RunError, RunFile, RunValue, StepOutcome, StepRun, ValueKind};
 use super::values::{self, fill, fill_name, Values};
 use super::Ports;
@@ -36,6 +37,7 @@ pub enum Ended {
 pub struct Ctx<'a> {
     pub home: &'a Path,
     pub ports: &'a Ports,
+    pub notices: &'a Notices,
     pub files: Files,
 }
 
@@ -218,7 +220,9 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
         }
         StepKind::Notify { message, next } => {
             let body = filled(message, run)?;
-            let shown = ctx.ports.notifier.notify(&run.workflow.name, &body);
+            let shown = ctx
+                .notices
+                .tell(NoticeKind::Message, run, &body, ctx.ports.now());
             Ok(Done {
                 message: shown
                     .err()

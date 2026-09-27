@@ -5,7 +5,7 @@
 import { createContext, useContext } from "react";
 import type {
   ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, Run, RunChanged,
-  NeedsYouItem, RunQuery, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
+  Activity, NeedsYouItem, Notice, RunQuery, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
 } from "./types";
 
 /** Every method may reject with an ApiError. */
@@ -73,6 +73,17 @@ export interface Api {
   dismissRun(runId: string): Promise<void>;
   /** Calls `listener` on every run-changed event until the returned function is called. */
   onRunChanged(listener: (change: RunChanged) => void): () => void;
+
+  // The bell and Pause all: see docs/engine.md, "Notifications" and "Pause all".
+  /** Newest first, at most 200. */
+  listNotices(): Promise<Notice[]>;
+  /** Marks these notifications read, or all of them when `ids` is left out. */
+  markNoticesRead(ids?: string[]): Promise<void>;
+  /** Calls `listener` with the unread count whenever the list changes, until the returned function is called. */
+  onNoticesChanged(listener: (unread: number) => void): () => void;
+  getActivity(): Promise<Activity>;
+  /** While paused, new files wait and scheduled times pass by; runs already going finish, and Run now still works. */
+  pauseAll(paused: boolean): Promise<Activity>;
 }
 
 export const ApiContext = createContext<Api | null>(null);
