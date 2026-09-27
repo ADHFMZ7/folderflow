@@ -31,6 +31,7 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `dismissRun(runId)` | `dismiss_run` | `runId` | nothing |
 | `listNotices()` | `list_notices` | none | `Notice[]` |
 | `markNoticesRead(ids?)` | `mark_notices_read` | `ids: string[] \| null` | nothing |
+| `clearNotices()` | `clear_notices` | none | nothing |
 | `getActivity()` | `get_activity` | none | `Activity` |
 | `pauseAll(paused)` | `pause_all` | `paused` | `Activity` |
 

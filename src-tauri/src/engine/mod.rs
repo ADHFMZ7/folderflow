@@ -363,6 +363,11 @@ impl Engine {
         self.inner.notices.mark_read(ids.as_deref());
     }
 
+    /// Empties the notification list; runs and their history are untouched.
+    pub fn clear_notices(&self) {
+        self.inner.notices.clear();
+    }
+
     pub fn activity(&self) -> Activity {
         Activity {
             paused: self.inner.is_paused(),

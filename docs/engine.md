@@ -296,7 +296,7 @@ Everything FolderFlow tells the person goes two ways: a macOS notification, and 
 | `message` | A Notify step | Its message |
 | `undo` | Undo run left files alone | "Undo put back 2 of this run's changes. 1 file changed since, so it was left alone." |
 
-The bell shows the unread count. Its panel lists them newest first; clicking one opens its run and marks it read, and "Mark all as read" clears the count. The `notices-changed` event (`onNoticesChanged`) carries the unread count whenever the list changes.
+The bell shows the unread count. Its panel lists them newest first; clicking one opens its run and marks it read, "Mark all as read" clears the count, and "Clear all" empties the list (runs stay in History). The `notices-changed` event (`onNoticesChanged`) carries the unread count whenever the list changes.
 
 ### Pause all
 
@@ -346,6 +346,7 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 | `getActivity()` | `get_activity` | `Activity` |
 | `listNotices()` | `list_notices` | `Notice[]`, newest first |
 | `markNoticesRead(ids?)` | `mark_notices_read` | nothing; all of them when `ids` is left out |
+| `clearNotices()` | `clear_notices` | nothing; runs and their history are untouched |
 
 Turning a workflow on stays a save with `enabled: true`; the engine hears of it from the command. Later, with the screen that offers to run on them, the result gains `alreadyThere: number`, the files recorded as seen without running.
 

@@ -428,6 +428,10 @@ export function createMockApi(options: MockOptions = {}): Api {
       for (const n of notices) if (!ids || ids.includes(n.id)) n.read = true;
       noticesChanged();
     },
+    async clearNotices() {
+      notices.splice(0);
+      noticesChanged();
+    },
     onNoticesChanged(listener) {
       noticeListeners.add(listener);
       return () => void noticeListeners.delete(listener);

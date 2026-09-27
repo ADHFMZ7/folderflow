@@ -79,6 +79,8 @@ export interface Api {
   listNotices(): Promise<Notice[]>;
   /** Marks these notifications read, or all of them when `ids` is left out. */
   markNoticesRead(ids?: string[]): Promise<void>;
+  /** Empties the list; runs and their history are untouched. */
+  clearNotices(): Promise<void>;
   /** Calls `listener` with the unread count whenever the list changes, until the returned function is called. */
   onNoticesChanged(listener: (unread: number) => void): () => void;
   getActivity(): Promise<Activity>;

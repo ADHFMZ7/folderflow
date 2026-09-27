@@ -104,6 +104,13 @@ async fn questions_and_failures_go_to_the_bell_and_to_macos() {
     // Kept across a restart.
     let h = h.restart();
     assert_eq!(h.engine.list_notices().len(), 2);
+
+    // Cleared, the list is empty, and the runs are still there.
+    h.engine.clear_notices();
+    assert!(h.engine.list_notices().is_empty());
+    assert_eq!(h.engine.get_run(&q).unwrap().status, RunStatus::Waiting);
+    let h = h.restart();
+    assert!(h.engine.list_notices().is_empty());
 }
 
 #[tokio::test]

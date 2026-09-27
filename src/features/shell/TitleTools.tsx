@@ -101,6 +101,10 @@ function NoticeBell() {
             {unread > 0 && (
               <button type="button" className={styles.textButton} onClick={() => api.markNoticesRead()}>Mark all as read</button>
             )}
+            {notices.length > 0 && (
+              <button type="button" className={styles.textButton} onClick={() => api.clearNotices()}
+                title="Empty this list. Runs stay in History.">Clear all</button>
+            )}
           </div>
           {notices.length ? (
             <ul className={styles.notices}>

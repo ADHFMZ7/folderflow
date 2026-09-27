@@ -59,6 +59,7 @@ export function createTauriApi(): Api {
     onRunChanged: (listener) => subscribe<RunChanged>("run-changed", listener),
     listNotices: () => call("list_notices"),
     markNoticesRead: (ids) => call("mark_notices_read", { ids: ids ?? null }),
+    clearNotices: () => call("clear_notices"),
     onNoticesChanged: (listener) => subscribe<number>("notices-changed", listener),
     getActivity: () => call("get_activity"),
     pauseAll: (paused) => call("pause_all", { paused }),

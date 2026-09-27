@@ -119,6 +119,14 @@ impl Notices {
         self.events.notices_changed(unread(&list));
     }
 
+    /// Empties the list. Runs and their history are untouched.
+    pub fn clear(&self) {
+        let mut list = self.lock();
+        list.clear();
+        self.save(&list);
+        self.events.notices_changed(0);
+    }
+
     fn save(&self, list: &[Notice]) {
         let result = (|| -> io::Result<()> {
             if let Some(folder) = self.path.parent() {

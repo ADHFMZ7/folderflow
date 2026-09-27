@@ -60,6 +60,24 @@ describe("title bar", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Notifications" })).not.toBeInTheDocument());
   });
 
+  it("clears the list, leaving the runs in History", async () => {
+    const { api, user } = renderApp(home);
+    const blank = await api.createWorkflow(null);
+    const { workflow } = await api.saveWorkflow({ ...blank, name: "Say", steps: say });
+    const [run] = await api.runNow(workflow.id, ["~/Downloads/a.pdf"]);
+    await waitFor(async () => expect((await api.getRun(run.id)).status).toBe("done"));
+
+    await user.click(await within(await titleBar()).findByRole("button", { name: "Notifications, 1 unread" }));
+    const panel = screen.getByRole("dialog", { name: "Notifications" });
+    await user.click(within(panel).getByRole("button", { name: "Clear all" }));
+
+    expect(await within(panel).findByText(/Nothing yet/)).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Clear all" })).not.toBeInTheDocument();
+    expect(within(await titleBar()).getByRole("button", { name: "Notifications" })).toBeInTheDocument();
+    expect(await api.listNotices()).toEqual([]);
+    expect((await api.getRun(run.id)).status).toBe("done");
+  });
+
   it("switches between light and dark", async () => {
     const { api, user } = renderApp({ settings: { setupComplete: true, appearance: "light" } });
 

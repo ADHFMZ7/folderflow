@@ -79,6 +79,7 @@ pub fn run() {
             commands::dismiss_run,
             commands::list_notices,
             commands::mark_notices_read,
+            commands::clear_notices,
             commands::get_activity,
             commands::pause_all,
         ])

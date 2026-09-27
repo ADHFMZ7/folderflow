@@ -244,6 +244,12 @@ pub async fn mark_notices_read(
 }
 
 #[tauri::command]
+pub async fn clear_notices(engine: State<'_, Engine>) -> Result<(), ApiError> {
+    engine.clear_notices();
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_activity(engine: State<'_, Engine>) -> Result<Activity, ApiError> {
     Ok(engine.activity())
 }
