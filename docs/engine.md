@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 3.
+How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 3, and 5.
 
 ## Summary
 
@@ -208,18 +208,23 @@ An AI step sends the file's text and the step's own instructions to one provider
 
 ### Reading the file
 
-`content` turns a file into text once per run and keeps it for the run's other AI steps. It uses macOS's own frameworks from Rust, through `objc2`.
+`content::read` (`engine/content/`) turns a file into text. It never fails: a file it can't read gives no text. It uses macOS's own frameworks from Rust, through `objc2`. From pull request 6, a run reads its file once and keeps the text for its other AI steps.
 
 | Files | How |
 |---|---|
-| txt, md, csv, json, vtt, srt, html, rtf | Read as text (UTF-8, else Latin-1); markup stripped |
-| pdf | PDFKit's text. Pages with almost no text (a scan) are drawn to an image and read by Vision's text recognition |
-| png, jpg, jpeg, heic, tiff, gif | Vision's text recognition |
-| docx, pptx | The text inside the document's XML |
-| xlsx | Cell values, sheet by sheet |
-| anything else, or nothing readable | No text. The model gets the file name only, and the run says so on the step |
+| txt, md, csv, tsv, json, vtt, srt, log | Read as text: UTF-8, else Latin-1. A file with a NUL byte isn't text |
+| html, htm | Tags, scripts, styles and comments dropped; entities decoded; a line per block |
+| rtf | Control words and their groups (fonts, colours, pictures) dropped; paragraphs as lines; `\'hh` and `\uN` characters decoded |
+| pdf | PDFKit's text, page by page. A page with fewer than 20 letters (a scan) is drawn at 144 dpi on white and read by Vision's text recognition, for at most 20 pages. A locked PDF gives no text |
+| png, jpg, jpeg, heic, tif, tiff, gif | Turned upright by ImageIO, put on white (dark text on a transparent background reads as nothing otherwise), and read by Vision, top to bottom |
+| docx | The paragraphs of `word/document.xml`, a line each |
+| pptx | Each slide in order (1, 2 … 10), a line per paragraph, a blank line between slides |
+| xlsx | Each sheet by name, in the workbook's order: a line per row, cells between tabs, shared strings looked up, formulas as their last value, TRUE/FALSE for yes/no |
+| anything else, or nothing readable | No text. The model gets the file name only, and the step says so: "FolderFlow couldn't read any text in X, so the model was given only its name." |
 
-Text is cut at about 30,000 characters (the first pages), and the step notes that it was cut. Recognition runs on the Mac, so a local model keeps everything on the Mac.
+Text is cut at 30,000 characters (about the first pages); the step says "X is long, so only its first 30,000 characters were read." Reading stops early rather than reading a whole huge file, and each part of an Office file is capped at 32 MB unpacked. Recognition runs on the Mac, so a local model keeps everything on the Mac.
+
+The sample files in `src-tauri/tests/fixtures/content` are made with the Mac's own tools by `make.sh` there, and `tests/content.rs` checks each kind. Text recognition is compared word by word, since macOS versions may break lines differently.
 
 ### What is sent
 
@@ -346,7 +351,7 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 | 2 ✓ | `files`: granted folders, the six actions, the journal, crash reconciling, undo | The file-safety and outside-the-folder tests pass, property test included |
 | 3 ✓ | Intake and schedules: watching, the seen record, own writes, catching up | The running-away tests pass; the Screenshots template works on a real folder |
 | 4 | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
-| 5 | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
+| 5 ✓ | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
 | 6 | `models`: Classify, Extract and Write, answer checking, review, errors (closes #8), decision 1 | The bad-data and wrong-place tests pass with the fake model; Sort receipts runs on Ollama |
 | 7 | Agent steps | The contract part of Paperwork inbox runs |
 | 8 | Try on a file | The Try button works in the editor, and nothing on disk changes |
