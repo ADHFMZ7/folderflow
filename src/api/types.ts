@@ -154,7 +154,7 @@ export type Workflow = {
 
 export type ProblemCode =
   | "no_trigger" | "many_triggers" | "duplicate_id" | "missing_step" | "unknown_branch" | "loop"
-  | "unreachable" | "required" | "unknown_variable" | "no_model" | "invalid_value";
+  | "unreachable" | "required" | "unknown_variable" | "no_model" | "invalid_value" | "folder_not_allowed";
 
 /** Something that stops a workflow from being turned on. stepId is null for the whole workflow. */
 /** `field` is the path of the field it's about in the step's JSON, e.g. "folder" or "categories.1.label". */
@@ -197,6 +197,8 @@ export type Run = {
   revision: number;
   workflow: Workflow;
   trigger: RunTrigger;
+  /** Where the run's file is now, after any Rename or Move. */
+  file: RunFile | null;
   status: RunStatus;
   /** When it was queued (RFC 3339). */
   startedAt: string;
@@ -204,7 +206,14 @@ export type Run = {
   steps: StepRun[];
   values: Record<string, RunValue>;
   error: RunError | null;
+  /** What undoing the run did, once it's undone. */
+  undo: UndoReport | null;
 };
+
+/** An action undo didn't reverse, because its file changed after the run. */
+export type LeftAlone = { path: string; reason: string };
+export type UndoReport = { restored: number; leftAlone: LeftAlone[] };
+export type UndoResult = { run: Run } & UndoReport;
 
 /** A line in the run history. `file` is the file's name; `error` says why a failed run failed. */
 export type RunSummary = {

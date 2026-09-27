@@ -12,6 +12,8 @@ use folderflow_lib::engine::{Clock, Engine, EngineEvents, Notifier, Ports, RunCh
 use folderflow_lib::storage::data_dir::DataDir;
 use folderflow_lib::storage::workflows::WorkflowStore;
 use folderflow_lib::workflow::Workflow;
+
+use super::files::FolderTrash;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -94,7 +96,8 @@ pub fn engine() -> EngineHarness {
 
 pub fn engine_with(notes: Notes) -> EngineHarness {
     let (tmp, dir) = super::data_dir();
-    let home = tmp.path().join("home");
+    // Resolved, so it matches the paths the engine records.
+    let home = std::fs::canonicalize(tmp.path()).unwrap().join("home");
     fs::create_dir_all(&home).unwrap();
     start(tmp, dir, home, notes)
 }
@@ -111,6 +114,7 @@ pub fn start(tmp: tempfile::TempDir, dir: DataDir, home: PathBuf, notes: Notes) 
             clock: Arc::new(TickingClock::new()),
             notifier: notes.clone(),
             events: Arc::new(Events(tx)),
+            trash: Arc::new(FolderTrash(home.parent().unwrap().join("trash"))),
         },
     )
     .unwrap();
@@ -178,6 +182,10 @@ impl EngineHarness {
         } = self;
         drop(engine);
         start(_tmp, DataDir::open(&root).unwrap(), home, Notes::default())
+    }
+
+    pub fn trash_dir(&self) -> PathBuf {
+        self.home.parent().unwrap().join("trash")
     }
 
     pub fn runs_dir(&self) -> PathBuf {

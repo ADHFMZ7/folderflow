@@ -8,6 +8,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use super::format::{Every, Field, Problem, ProblemCode, Schedule, Step, StepKind, Workflow};
+use super::paths::{self, PathProblem};
 
 /// The problems with `workflow`, in step order within each kind of check.
 /// `models` holds the model kinds that have a working default model.
@@ -372,8 +373,9 @@ fn check_fields(step: &Step, out: &mut Problems) {
     check_values(step, out);
 }
 
-/// Malformed values: variable names, times, weekdays and extensions.
+/// Malformed values: variable names, times, weekdays, extensions and paths.
 fn check_values(step: &Step, out: &mut Problems) {
+    check_paths(step, out);
     match &step.kind {
         StepKind::FileAdded { file_types, .. } => {
             for (i, ext) in file_types.iter().enumerate() {
@@ -412,6 +414,31 @@ fn check_values(step: &Step, out: &mut Problems) {
             ),
         ),
         _ => {}
+    }
+}
+
+/// Folder and file paths: full, never climbing out with `..`, and never naming a
+/// folder FolderFlow doesn't work in (docs/engine.md, "Granted folders").
+fn check_paths(step: &Step, out: &mut Problems) {
+    let (field, path, is_file) = match &step.kind {
+        StepKind::FileAdded { folder, .. } => ("folder", folder, false),
+        StepKind::Move { to, .. } => ("to", to, false),
+        StepKind::CreateFile {
+            folder: Some(folder),
+            ..
+        } => ("folder", folder, false),
+        StepKind::AddRow { file, .. } => ("file", file, true),
+        _ => return,
+    };
+    if blank(path) {
+        return;
+    }
+    if let Err(problem) = paths::check(path, is_file) {
+        let code = match problem {
+            PathProblem::NotAllowed(_) => ProblemCode::FolderNotAllowed,
+            _ => ProblemCode::InvalidValue,
+        };
+        out.at(step, field, code, problem.message());
     }
 }
 

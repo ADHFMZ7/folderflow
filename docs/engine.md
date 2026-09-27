@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull request 1.
+How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 and 2.
 
 ## Summary
 
@@ -121,7 +121,9 @@ stateDiagram-v2
 
 The runner starts at the trigger and follows `next` or the branch the step chose. Before a step runs, every `{name}` in its fields is replaced by its value. Values have the kind their step gave them: text, number, date (`YYYY-MM-DD`) or yes/no.
 
-In file names and folders, a value is made safe first: `/` and `:` become `-`, leading dots and spaces are removed, and it's cut to 200 bytes. A value that ends up empty fails the step ("{vendor} was empty, so the new name would be empty").
+In file names and folders, a value is made safe first: `/` and `:` become `-`, control characters become spaces, leading dots and spaces and trailing spaces are removed, and it's cut to 200 bytes. So a value can't add a folder level, climb out with `..` or hide the file. The text around the variables is kept as written. A value that ends up empty fails the step before anything moves ("{vendor} is empty, so it can't be used in a file or folder name."). This is `values::fill_name`.
+
+The run keeps track of where its file is now (`file` in the run record), so a Move after a Rename moves the renamed file. Rename gives `{newName}` (the new name without its extension, numbered if it had to be) and Move gives `{newFolder}` (where the file or its copy went, with `~`). Each file step leaves a message in plain words: "Renamed Scan.pdf to 2026-09-14 Blue Bottle.pdf.", "Moved … to ~/Documents/Receipts/2026.", "Tagged … Screenshot and 2026.", "Added a row to Expenses.csv."
 
 | Step | At run time | Fails when |
 |---|---|---|
@@ -152,12 +154,16 @@ FolderFlow never deletes and never overwrites. Every change is written down befo
 
 A workflow may only touch the folders it names. They're worked out when it's turned on:
 
+- the folder the run's file is in (not the folders inside it);
 - the trigger folder (and everything below it when `subfolders` is on);
-- for each Move and Create file folder, and each Add row file, the fixed part of the path before the first `{variable}`. `~/Documents/Paperwork/{category}` grants `~/Documents/Paperwork` and below.
+- for each Move and Create file folder, the fixed part of the path before the folder holding the first `{variable}`, and below. `~/Documents/Paperwork/{category}` grants `~/Documents/Paperwork` and below;
+- for each Add row file, its folder; with a variable in the path, the fixed part and below.
+
+A path that starts with a variable, like Create file's `{newFolder}`, grants nothing of its own: where it leads must already be granted by another step. This is `Grants::for_run`, from the text alone (`workflow/paths.rs`), so validation and the engine agree.
 
 Every path is checked just before use: `~` expanded, existing parts resolved through symlinks, `..` refused, and the result must sit inside a granted folder. The comparison ignores case on case-insensitive volumes (the APFS default). A variable's value can't add a folder level, because `/` is already replaced.
 
-Some folders can never be granted, and validation says so (`folder_not_allowed`): `/`, your home folder itself, `~/Library`, `/System`, `/Applications`, and FolderFlow's own data folder.
+Some folders can never be granted, and validation says so (`folder_not_allowed`): `/`, your home folder itself, `~/Library` (which holds FolderFlow's own data folder), `/System` and `/Applications`, in any case. A path that isn't full (`~/…` or `/…`) or that uses `..` is `invalid_value`. The engine skips any such folder when granting, in case a workflow file skipped validation.
 
 macOS asks for permission the first time an app opens Desktop, Documents or Downloads. If access is refused, the step fails with "FolderFlow isn't allowed to open Downloads. Allow it in System Settings › Privacy & Security › Files and Folders."
 
@@ -169,25 +175,29 @@ macOS asks for permission the first time an app opens Desktop, Documents or Down
 | Move | Creates missing folders, then moves. Same disk: one atomic rename. Another disk: copy to a hidden temporary file beside the target, flush, rename into place, check the size, and only then remove the original. | Adds " 2" | Back to the old folder and name; folders it created are removed if empty |
 | Copy | Like Move, keeping the original. A clone on APFS, so it's instant and takes no space. | Adds " 2" | The copy goes to the Trash |
 | Create file | Writes a temporary file, then renames it into place | Adds " 2" | The file goes to the Trash |
-| Add row | Reads the CSV, adds the row, writes it all to a temporary file and swaps it in, so a crash never leaves half a row. A new file starts with the headings. | Not possible | The row is removed if the file is otherwise unchanged; if someone edited it since, the row stays and undo says so |
-| Tag | Adds Finder tags, keeping the ones already there | Not possible | Removes only the tags it added |
+| Add row | Reads the CSV, adds the row, writes it all to a temporary file and swaps it in, so a crash never leaves half a row. A new file (and its folder) is created, starting with the headings. The file's own line endings are kept, and an unfinished last line is finished. If the file changes between reading and swapping, it's read again (three tries). A spreadsheet that is a link is refused. | Not possible | The row is removed if the file is otherwise unchanged; if someone edited it since, the row stays and undo says so |
+| Tag | Adds Finder tags it doesn't have (ignoring case), keeping the ones already there and their colours | Not possible | Removes only the tags it added |
 | Notify | Shows a notification | Not possible | Nothing to undo |
 
 "No overwrite" is enforced by the operating system, not by checking first: renames use `renamex_np` with `RENAME_EXCL`, which fails if the name exists, and new files are created with `O_EXCL`. There's no gap between checking and writing for another app to use.
 
-CSV values that start with `=`, `+`, `-` or `@` get a leading `'`, so a spreadsheet never runs a formula that came from a document.
+CSV values that start with `=`, `+`, `-`, `@`, a tab or a carriage return get a leading `'`, so a spreadsheet never runs a formula that came from a document. Plain numbers like `-12.50` are left as they are.
+
+Only the file being acted on, and only a regular file, is touched: a link is refused rather than followed. Access refused by macOS says which setting to change ("If it's in Desktop, Documents or Downloads, allow FolderFlow in System Settings › Privacy & Security › Files and Folders.").
 
 ### The journal
 
-`engine/journal/<run id>.jsonl`. Each action writes an **intent** line before touching the disk and a **done** line after. Each line holds the paths before and after, the inode, size and modification time, and, for Add row, the path of a backup of the previous CSV.
+`engine/journal/<run id>.jsonl` in the data folder (`engine/files/journal.rs`). Each action writes an **intent** line before touching the disk and a **done** line after, each flushed to disk. The intent holds the paths before and after, the hidden temporary file (`.name.ffpart-…`) if it uses one, and, for Add row, a backup of the previous CSV (in `<run id>.backups/`) and the file's length once the row is in. The done line holds the inode, size and modification time the action left. Folders created on the way are actions of their own.
 
-At start-up, an intent without a done line is checked against the disk: if the file is at the new place, the action is marked done, and if it's still at the old place, it's marked not done. Either way nothing is lost, and the run becomes interrupted.
+At start-up, an intent without a done line is checked against the disk: if the file is at the new place, the action is marked done, and if it's still at the old place, it's marked not done; temporary files are removed. A move to another disk writes a **placed** line once its copy is whole in place, so a crash after that finishes the move by removing the original. Either way nothing is lost, and the run becomes interrupted. This is `files::recover`, run before anything else starts.
 
 ### Undo
 
 Undo is per run and reverses its actions newest first. Each one first checks that the file is still exactly as the run left it: same inode, size and modification time. A file that has changed since is left alone, and undo lists it ("Invoice 2026-044.pdf was changed after this run, so it wasn't moved back"). If the old name is taken by now, the file comes back with " 2". Undo is recorded in the run, and the run becomes `undone`.
 
-Files FolderFlow made are moved to the Trash, never deleted, so even undo can be undone from Finder.
+Files FolderFlow made are moved to the Trash, never deleted, so even undo can be undone from Finder. Folders the run created are removed only if they're empty. Undo writes what it did to the journal too, so undoing twice reverses nothing more, and a file undo itself put back still counts as unchanged for the actions before it.
+
+`Engine::undo_run` does this for a run that is done, failed or interrupted; the Undo button comes with the History page (pull request 4).
 
 ## AI steps
 
@@ -330,7 +340,7 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 | # | Pull request | Done when |
 |---|---|---|
 | 1 ✓ | Engine skeleton: delete `engine/`, add the modules, run records, the runner with If, Stop and Notify, and Run now | A Run now workflow of If and Notify runs, and its run can be read back |
-| 2 | `files`: granted folders, the six actions, the journal, crash reconciling, undo | The file-safety and outside-the-folder tests pass, property test included |
+| 2 ✓ | `files`: granted folders, the six actions, the journal, crash reconciling, undo | The file-safety and outside-the-folder tests pass, property test included |
 | 3 | Intake and schedules: watching, waiting until complete, the seen record, own writes, catching up | The running-away tests pass; the Screenshots template works on a real folder |
 | 4 | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
 | 5 | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
@@ -339,4 +349,4 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 | 8 | Try on a file | The Try button works in the editor, and nothing on disk changes |
 | 9 | Background: menu bar, Pause all, Open at login (the autostart plugin) | Workflows keep running with the window closed, and after a restart |
 
-Pull request 1 added only the modules it needed (`engine`, `runs`, `runner`, `values`, and `app` for the app's notifications and events); each later one adds its own.
+Pull request 1 added only the modules it needed (`engine`, `runs`, `runner`, `values`, and `app` for the app's notifications, events and Trash); pull request 2 added `files`. Each later one adds its own.

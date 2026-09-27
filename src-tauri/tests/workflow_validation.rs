@@ -586,7 +586,7 @@ fn each_step_produces_what_the_contract_lists() {
         step(
             "m",
             StepKind::Move {
-                to: "~/{year}".into(),
+                to: "~/Documents/{year}".into(),
                 mode: MoveMode::Move,
                 next: next(Some("a")),
             },
@@ -662,7 +662,7 @@ fn variables_are_checked_in_every_text_field() {
         step(
             "row",
             StepKind::AddRow {
-                file: "~/{c}.csv".into(),
+                file: "~/Documents/{c}.csv".into(),
                 columns: vec!["{d}".into()],
                 headers: None,
                 next: next(Some("cf")),
@@ -1026,7 +1026,7 @@ fn add_row(id: &str, columns: &[&str], headers: Option<&[&str]>) -> Step {
     step(
         id,
         StepKind::AddRow {
-            file: "~/Expenses.csv".into(),
+            file: "~/Documents/Expenses.csv".into(),
             columns: columns.iter().map(|c| c.to_string()).collect(),
             headers: headers.map(|h| h.iter().map(|c| c.to_string()).collect()),
             next: None,
@@ -1154,7 +1154,7 @@ fn field_problems_name_the_field_they_are_about() {
         step(
             "m",
             StepKind::Move {
-                to: "~/{category}/{nope}".into(),
+                to: "~/Documents/{category}/{nope}".into(),
                 mode: MoveMode::Move,
                 next: None,
             },
@@ -1208,4 +1208,175 @@ fn step_wide_problems_have_no_field() {
     assert_eq!(field_of(NoModel), None);
     assert_eq!(field_of(Unreachable), None);
     assert_eq!(field_of(Required), Some("categories".into()));
+}
+
+// ---- Folders a workflow may touch (docs/engine.md, "Granted folders") -------
+
+fn move_to(id: &str, to: &str) -> Step {
+    step(
+        id,
+        StepKind::Move {
+            to: to.into(),
+            mode: MoveMode::Move,
+            next: None,
+        },
+    )
+}
+
+fn watching(folder: &str, to: Option<&str>) -> Step {
+    step(
+        "t",
+        StepKind::FileAdded {
+            folder: folder.into(),
+            file_types: vec![],
+            subfolders: false,
+            next: next(to),
+        },
+    )
+}
+
+fn add_row_to(id: &str, file: &str) -> Step {
+    step(
+        id,
+        StepKind::AddRow {
+            file: file.into(),
+            columns: vec!["{file}".into()],
+            headers: None,
+            next: None,
+        },
+    )
+}
+
+fn create_in(id: &str, folder: &str) -> Step {
+    step(
+        id,
+        StepKind::CreateFile {
+            name: "{file}.txt".into(),
+            contents: "hi".into(),
+            folder: Some(folder.into()),
+            next: None,
+        },
+    )
+}
+
+/// The field and code of each folder problem, for a workflow whose trigger
+/// leads to `action`.
+fn folder_problems(action: Step) -> Vec<(Option<String>, ProblemCode)> {
+    let w = wf(vec![watching("~/Downloads", Some(&action.id)), action]);
+    validate(&w, &all_models())
+        .into_iter()
+        .filter(|p| matches!(p.code, FolderNotAllowed | InvalidValue))
+        .map(|p| (p.field, p.code))
+        .collect()
+}
+
+#[test]
+fn folders_inside_the_home_folder_are_fine() {
+    for to in [
+        "~/Documents/Receipts/{year}",
+        "~/Downloads/{category}",
+        "~/Pictures/Screenshots",
+        "/Volumes/Backup/Scans",
+        "{newFolder}",
+        "~/Documents/{category} {year}",
+    ] {
+        assert_eq!(folder_problems(move_to("m", to)), [], "{to}");
+    }
+    assert_eq!(
+        folder_problems(add_row_to("a", "~/Documents/Expenses.csv")),
+        []
+    );
+    assert_eq!(folder_problems(create_in("c", "~/Documents/Notes")), []);
+}
+
+#[test]
+fn system_folders_the_library_and_the_whole_home_folder_are_off_limits() {
+    for to in [
+        "~",
+        "~/",
+        "~/{category}",
+        "~/Library/Mail",
+        "~/library/{year}",
+        "/",
+        "/{category}",
+        "/System/Library",
+        "/Applications",
+        "/applications/Utilities",
+        "~//Library",
+    ] {
+        assert_eq!(
+            folder_problems(move_to("m", to)),
+            [(Some("to".to_string()), FolderNotAllowed)],
+            "{to}"
+        );
+    }
+    assert_eq!(
+        folder_problems(add_row_to("a", "~/Expenses.csv")),
+        [(Some("file".to_string()), FolderNotAllowed)]
+    );
+    assert_eq!(
+        folder_problems(create_in("c", "~/Library")),
+        [(Some("folder".to_string()), FolderNotAllowed)]
+    );
+    let w = wf(vec![watching("~/Library/Caches", None)]);
+    assert_eq!(
+        problems_of(&w, FolderNotAllowed)
+            .into_iter()
+            .map(|p| p.field)
+            .collect::<Vec<_>>(),
+        [Some("folder".to_string())]
+    );
+}
+
+#[test]
+fn a_forbidden_folder_says_what_to_do() {
+    let w = wf(vec![
+        watching("~/Downloads", Some("m")),
+        move_to("m", "~/Library/Mail"),
+    ]);
+    let problem = &problems_of(&w, FolderNotAllowed)[0];
+    assert_eq!(
+        problem.message,
+        "FolderFlow doesn't work in ~/Library/Mail. Choose a folder inside your home folder, like ~/Documents."
+    );
+}
+
+#[test]
+fn paths_must_be_full_and_cant_climb_out() {
+    for to in [
+        "Receipts",
+        "Documents/{year}",
+        "~ada/Documents",
+        "~/Documents/../Library",
+        "~/Documents/{year}/..",
+    ] {
+        assert_eq!(
+            folder_problems(move_to("m", to)),
+            [(Some("to".to_string()), InvalidValue)],
+            "{to}"
+        );
+    }
+    let w = wf(vec![
+        watching("~/Downloads", Some("m")),
+        move_to("m", "Receipts"),
+    ]);
+    assert_eq!(
+        problems_of(&w, InvalidValue)[0].message,
+        "Write the full path, starting with ~/ or /."
+    );
+    let w = wf(vec![
+        watching("~/Downloads", Some("m")),
+        move_to("m", "~/Documents/.."),
+    ]);
+    assert_eq!(
+        problems_of(&w, InvalidValue)[0].message,
+        "A path can't use .. to go up a folder."
+    );
+}
+
+#[test]
+fn an_empty_create_file_folder_means_the_files_own_folder() {
+    let w = wf(vec![watching("~/Downloads", Some("c")), create_in("c", "")]);
+    assert_eq!(problems_of(&w, FolderNotAllowed), []);
+    assert_eq!(problems_of(&w, InvalidValue), []);
 }

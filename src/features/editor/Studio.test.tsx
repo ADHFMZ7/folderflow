@@ -325,12 +325,13 @@ describe("run now", () => {
   });
 
   it("counts the files, and says why a run failed", async () => {
-    const rename: Step = { id: "r", type: "rename", title: "Rename it", position: { x: 0, y: 160 }, template: "{file} done", next: null };
-    await openWith([fileTrigger("r"), rename], "Rename it", { chosenFiles: ["~/Downloads/a.pdf", "~/Downloads/b.pdf"] });
+    const ask: Step = { id: "q", type: "askMe", title: "Ask first", position: { x: 0, y: 160 }, question: "File it?",
+      answers: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }], branches: {} };
+    await openWith([fileTrigger("q"), ask], "Ask first", { chosenFiles: ["~/Downloads/a.pdf", "~/Downloads/b.pdf"] });
 
     run();
 
-    expect(await screen.findByText("Ran on 2 files, 2 failed: Rename steps can't run in this version of FolderFlow yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Ran on 2 files, 2 failed: Ask me steps can't run in this version of FolderFlow yet.")).toBeInTheDocument();
   });
 
   it("runs nothing when the picker is cancelled", async () => {

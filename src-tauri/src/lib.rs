@@ -10,7 +10,7 @@ use tauri::Manager;
 use api::commands;
 use api::providers::HttpProviders;
 use api::Backend;
-use engine::app::{AppEvents, AppNotifier};
+use engine::app::{AppEvents, AppNotifier, AppTrash};
 use engine::{Engine, Ports, SystemClock};
 use storage::data_dir::DataDir;
 use storage::secrets::KeychainStore;
@@ -31,6 +31,7 @@ pub fn run() {
                     clock: Arc::new(SystemClock),
                     notifier: Arc::new(AppNotifier::new(&app.config().identifier)),
                     events: Arc::new(AppEvents(app.handle().clone())),
+                    trash: Arc::new(AppTrash),
                 },
             )?;
             app.manage(engine);

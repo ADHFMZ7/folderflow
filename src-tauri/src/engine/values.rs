@@ -24,14 +24,71 @@ pub fn value(kind: ValueKind, value: impl Into<String>) -> RunValue {
 /// variable stay as they are. Fails with the name of a variable that has no
 /// value, which validation should already have ruled out.
 pub fn fill(text: &str, values: &Values) -> Result<String, String> {
+    fill_each(text, values, |_, value| Ok(value.to_owned())).map_err(|e| match e {
+        Unfilled::Missing(name) => name,
+        Unfilled::Unsafe(name) => name,
+    })
+}
+
+/// Like `fill`, for a file or folder name or path: each value is made safe
+/// first (see `safe`), so a value can never add a folder level or hide the
+/// file. The text around the variables is kept as written.
+pub fn fill_name(text: &str, values: &Values) -> Result<String, String> {
+    fill_each(text, values, |name, value| {
+        let safe = safe(value);
+        if safe.is_empty() {
+            Err(name.to_owned())
+        } else {
+            Ok(safe)
+        }
+    })
+    .map_err(|e| match e {
+        Unfilled::Missing(name) => format!("{{{name}}} has no value at this step."),
+        Unfilled::Unsafe(name) => {
+            format!("{{{name}}} is empty, so it can't be used in a file or folder name.")
+        }
+    })
+}
+
+/// A value fit for a file name: `/` and `:` become `-`, leading dots and
+/// spaces and trailing spaces go, and it's cut to 200 bytes.
+pub fn safe(value: &str) -> String {
+    let replaced: String = value
+        .chars()
+        .map(|c| match c {
+            '/' | ':' => '-',
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .collect();
+    let trimmed = replaced.trim_start_matches(['.', ' ']).trim_end();
+    let mut cut = trimmed.len().min(200);
+    while !trimmed.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    trimmed[..cut].trim_end().to_owned()
+}
+
+enum Unfilled {
+    Missing(String),
+    Unsafe(String),
+}
+
+fn fill_each(
+    text: &str,
+    values: &Values,
+    each: impl Fn(&str, &str) -> Result<String, String>,
+) -> Result<String, Unfilled> {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     for name in variables_in(text) {
         let token = format!("{{{name}}}");
         let at = rest.find(&token).expect("variables_in found it");
-        let value = values.get(name).ok_or_else(|| name.to_owned())?;
+        let value = values
+            .get(name)
+            .ok_or_else(|| Unfilled::Missing(name.to_owned()))?;
         out.push_str(&rest[..at]);
-        out.push_str(&value.value);
+        out.push_str(&each(name, &value.value).map_err(Unfilled::Unsafe)?);
         rest = &rest[at + token.len()..];
     }
     out.push_str(rest);
@@ -145,6 +202,39 @@ mod tests {
     fn a_value_that_looks_like_a_variable_isnt_filled_again() {
         let v = values(&[("a", "{b}"), ("b", "x")]);
         assert_eq!(fill("{a}-{b}", &v).unwrap(), "{b}-x");
+    }
+
+    #[test]
+    fn values_in_names_cant_add_folders_or_hide_the_file() {
+        let v = values(&[
+            ("vendor", "AC/DC: Live"),
+            ("dots", "..hidden"),
+            ("up", "../../Library"),
+        ]);
+        assert_eq!(
+            fill_name("~/Receipts/{vendor}", &v).unwrap(),
+            "~/Receipts/AC-DC- Live"
+        );
+        assert_eq!(fill_name("{dots}", &v).unwrap(), "hidden");
+        assert_eq!(
+            fill_name("~/Documents/{up}", &v).unwrap(),
+            "~/Documents/-..-Library"
+        );
+        assert_eq!(safe(&"é".repeat(150)).len(), 200);
+        assert_eq!(safe("tab\there\n"), "tab here");
+    }
+
+    #[test]
+    fn an_empty_value_cant_make_a_name() {
+        let v = values(&[("vendor", " .. "), ("date", "2026")]);
+        assert_eq!(
+            fill_name("{date} {vendor}", &v),
+            Err("{vendor} is empty, so it can't be used in a file or folder name.".to_string())
+        );
+        assert_eq!(
+            fill_name("{nope}", &v),
+            Err("{nope} has no value at this step.".to_string())
+        );
     }
 
     #[test]
