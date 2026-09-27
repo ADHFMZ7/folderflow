@@ -5,6 +5,7 @@
 //! run the engine for real in a temp folder with fakes for those alone.
 
 pub mod app;
+pub mod files;
 mod runner;
 pub mod runs;
 pub mod values;
@@ -27,7 +28,10 @@ use crate::storage::data_dir::DataDir;
 use crate::storage::settings::SettingsStore;
 use crate::storage::workflows::WorkflowStore;
 use crate::workflow::{validate, StepKind};
-use runs::{Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, TriggerKind};
+use files::{Files, Grants, Trash};
+use runs::{
+    Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, TriggerKind, UndoResult,
+};
 
 /// The time on the Mac, in its own time zone.
 pub trait Clock: Send + Sync {
@@ -59,6 +63,7 @@ pub struct Ports {
     pub clock: Arc<dyn Clock>,
     pub notifier: Arc<dyn Notifier>,
     pub events: Arc<dyn EngineEvents>,
+    pub trash: Arc<dyn Trash>,
 }
 
 impl Ports {
@@ -89,6 +94,7 @@ struct Inner {
     runs: RunStore,
     workflows: WorkflowStore,
     settings: SettingsStore,
+    journal: PathBuf,
     home: PathBuf,
     ports: Ports,
     /// One queue per workflow, so its runs go one at a time, in order.
@@ -96,13 +102,17 @@ struct Inner {
 }
 
 impl Engine {
-    /// Starts the engine on the app's data folder. Runs left queued or running
-    /// when the app last stopped are marked interrupted; none restarts on its own.
+    /// Starts the engine on the app's data folder. File actions a crash left
+    /// half-known are settled from the journal first. Runs left queued or
+    /// running when the app last stopped are marked interrupted; none restarts
+    /// on its own (decision 5).
     pub fn new(dir: &DataDir, home: PathBuf, ports: Ports) -> io::Result<Self> {
+        files::recover(&dir.journal_path())?;
         let inner = Inner {
             runs: RunStore::new(dir),
             workflows: WorkflowStore::new(dir),
             settings: SettingsStore::new(dir),
+            journal: dir.journal_path(),
             home,
             ports,
             queues: Mutex::new(HashMap::new()),
@@ -169,8 +179,10 @@ impl Engine {
                 workflow: workflow.clone(),
                 trigger: RunTrigger {
                     kind: TriggerKind::RunNow,
-                    file: Some(file),
+                    file: Some(file.clone()),
                 },
+                file: Some(file),
+                undo: None,
                 status: RunStatus::Queued,
                 started_at: inner.ports.now(),
                 ended_at: None,
@@ -186,6 +198,35 @@ impl Engine {
             Inner::enqueue(inner, &run.workflow_id, &run.id);
         }
         Ok(queued.iter().map(Run::summary).collect())
+    }
+
+    /// Reverses every file action of a finished run, newest first, and marks
+    /// it undone. Files changed since are left alone and listed.
+    pub fn undo_run(&self, id: &str) -> Result<UndoResult, ApiError> {
+        let mut run = self.get_run(id)?;
+        match run.status {
+            RunStatus::Done | RunStatus::Failed | RunStatus::Interrupted => {}
+            RunStatus::Undone => {
+                return Err(ApiError::new(
+                    ErrorCode::Conflict,
+                    "This run was already undone.",
+                ))
+            }
+            RunStatus::Queued | RunStatus::Running | RunStatus::Waiting => {
+                return Err(ApiError::new(
+                    ErrorCode::Conflict,
+                    "This run hasn't finished, so it can't be undone yet.",
+                ))
+            }
+        }
+        let inner = &self.inner;
+        let report = files::undo(&inner.journal, &run.id, inner.ports.trash.as_ref())
+            .map_err(|e| ApiError::new(ErrorCode::Io, format!("Couldn't undo the run: {e}.")))?;
+        run.status = RunStatus::Undone;
+        run.undo = Some(report.clone());
+        inner.runs.save(&run).map_err(history_error)?;
+        inner.announce(&run);
+        Ok(UndoResult { run, report })
     }
 
     pub fn get_run(&self, id: &str) -> Result<Run, ApiError> {
@@ -260,7 +301,25 @@ impl Inner {
         self.save(&run);
         self.announce(&run);
 
-        let result = runner::run(&mut run, &self.home, &self.ports, |r| self.save(r)).await;
+        let grants = Grants::for_run(
+            &run.workflow,
+            run.file.as_ref().map(|f| f.path.as_path()),
+            &self.home,
+        );
+        let result = match Files::open(&self.journal, &run.id, grants) {
+            Ok(files) => {
+                let mut ctx = runner::Ctx {
+                    home: &self.home,
+                    ports: &self.ports,
+                    files,
+                };
+                runner::run(&mut run, &mut ctx, |r| self.save(r)).await
+            }
+            Err(e) => Err(runs::RunError {
+                step_id: None,
+                message: format!("Couldn't open the run's journal: {e}."),
+            }),
+        };
 
         run.ended_at = Some(self.ports.now());
         run.status = match result {

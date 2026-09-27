@@ -302,6 +302,8 @@ pub enum ProblemCode {
     UnknownVariable,
     NoModel,
     InvalidValue,
+    /// A path names a folder FolderFlow never works in.
+    FolderNotAllowed,
 }
 
 /// What `save_workflow` returns: the workflow as saved, and its problems.

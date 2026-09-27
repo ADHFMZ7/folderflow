@@ -2,7 +2,7 @@
 // case for case, so screens behave the same against either.
 
 import { describe, expect, it } from "vitest";
-import { fileValues, fill, holds } from "./mockRuns";
+import { fileValues, fill, fillName, holds } from "./mockRuns";
 
 describe("holds", () => {
   it("compares numbers as numbers", () => {
@@ -37,5 +37,21 @@ describe("values", () => {
     const v = fileValues("~/Downloads/my.scan.PDF", new Date(2026, 0, 2));
     expect([v.file.value, v.extension.value, v.folder.value, v.dateAdded.value, v.year.value])
       .toEqual(["my.scan", "PDF", "~/Downloads", "2026-01-02", "2026"]);
+  });
+});
+
+describe("names", () => {
+  const v = (value: string) => ({ kind: "text" as const, value });
+
+  it("makes values safe for file names, as the core does", () => {
+    const values = { vendor: v("AC/DC: Live"), dots: v("..hidden"), up: v("../../Library") };
+    expect(fillName("~/Receipts/{vendor}", values)).toBe("~/Receipts/AC-DC- Live");
+    expect(fillName("{dots}", values)).toBe("hidden");
+    expect(fillName("~/Documents/{up}", values)).toBe("~/Documents/-..-Library");
+  });
+
+  it("refuses a value that ends up empty", () => {
+    expect(() => fillName("{date} {vendor}", { date: v("2026"), vendor: v(" .. ") }))
+      .toThrow("{vendor} is empty, so it can't be used in a file or folder name.");
   });
 });

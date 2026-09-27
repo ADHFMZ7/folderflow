@@ -26,6 +26,11 @@ impl DataDir {
         self.root.join("settings.json")
     }
 
+    /// The engine's journals of file actions: `engine/journal/<run id>.jsonl`.
+    pub fn journal_path(&self) -> PathBuf {
+        self.root.join("engine").join("journal")
+    }
+
     /// Where workflow files live: `workflows/<id>.json`.
     pub fn workflows_path(&self) -> PathBuf {
         self.root.join("workflows")

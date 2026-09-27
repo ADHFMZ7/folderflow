@@ -387,8 +387,9 @@ describe("runs", () => {
     const a = api();
     const wf = await a.createWorkflow(null);
     const steps: Step[] = [
-      { id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next: "r" },
-      { id: "r", type: "rename", title: "Rename it", position: { x: 0, y: 160 }, template: "{file} done", next: null },
+      { id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next: "q" },
+      { id: "q", type: "askMe", title: "Ask", position: { x: 0, y: 160 }, question: "File it?",
+        answers: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }], branches: {} },
     ];
     const saved = (await a.saveWorkflow({ ...wf, steps })).workflow;
 
@@ -396,8 +397,39 @@ describe("runs", () => {
     await until(a, queued.id, "failed");
 
     const run = await a.getRun(queued.id);
-    expect(run.error).toEqual({ stepId: "r", message: "Rename steps can't run in this version of FolderFlow yet." });
+    expect(run.error).toEqual({ stepId: "q", message: "Ask me steps can't run in this version of FolderFlow yet." });
     expect((await a.listRuns({ status: "failed" }))[0].error).toBe(run.error!.message);
+  });
+
+  it("runs file steps like the core, saying what each did", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    const at = (y: number) => ({ x: 0, y });
+    const steps: Step[] = [
+      { id: "t", type: "runNow", title: "Run now", position: at(0), next: "r" },
+      { id: "r", type: "rename", title: "Rename", position: at(1), template: "{dateAdded} {file}", next: "g" },
+      { id: "g", type: "tag", title: "Tag", position: at(2), tags: ["Screenshot"], next: "m" },
+      { id: "m", type: "move", title: "Move", position: at(3), to: "~/Pictures/{year}", mode: "move", next: "c" },
+      { id: "c", type: "createFile", title: "Note", position: at(4), name: "{newName}.txt", contents: "", next: "a" },
+      { id: "a", type: "addRow", title: "Log", position: at(5), file: "~/Documents/Log.csv", columns: ["{newName}"], next: null },
+    ];
+    const saved = (await a.saveWorkflow({ ...wf, steps })).workflow;
+
+    const [queued] = await a.runNow(saved.id, ["~/Desktop/Shot.png"]);
+    await until(a, queued.id, "done");
+
+    const run = await a.getRun(queued.id);
+    const today = run.values.dateAdded.value;
+    const year = run.values.year.value;
+    expect(run.steps.map((s) => s.message).filter(Boolean)).toEqual([
+      `Renamed Shot.png to ${today} Shot.png.`,
+      `Tagged ${today} Shot.png Screenshot.`,
+      `Moved ${today} Shot.png to ~/Pictures/${year}.`,
+      `Created ${today} Shot.txt in ~/Pictures/${year}.`,
+      "Added a row to Log.csv.",
+    ]);
+    expect(run.file?.path).toBe(`~/Pictures/${year}/${today} Shot.png`);
+    expect(run.values.newFolder.value).toBe(`~/Pictures/${year}`);
   });
 
   it("refuses what the core refuses", async () => {

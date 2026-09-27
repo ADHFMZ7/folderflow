@@ -11,11 +11,25 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, AllocAnyThread};
 use objc2_foundation::{
-    NSString, NSUserNotification, NSUserNotificationCenter, NSUserNotificationCenterDelegate,
+    NSFileManager, NSString, NSUserNotification, NSUserNotificationCenter,
+    NSUserNotificationCenterDelegate, NSURL,
 };
 use tauri::{AppHandle, Emitter};
 
+use super::files::Trash;
 use super::{EngineEvents, Notifier, RunChanged};
+
+/// The Mac's Trash, where Finder's "Put Back" can restore from.
+pub struct AppTrash;
+
+impl Trash for AppTrash {
+    fn trash(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
+        NSFileManager::defaultManager()
+            .trashItemAtURL_resultingItemURL_error(&url, None)
+            .map_err(|e| std::io::Error::other(e.localizedDescription().to_string()))
+    }
+}
 
 /// Notifications from FolderFlow. They show as banners even while FolderFlow
 /// is the front app, which macOS otherwise skips: a person who just chose Run

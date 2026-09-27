@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::files::UndoReport;
 use crate::storage::atomic::write_atomic;
 use crate::storage::data_dir::DataDir;
 use crate::storage::workflows::is_workflow_id;
@@ -27,6 +28,9 @@ pub struct Run {
     /// copy, so editing the workflow meanwhile doesn't change it.
     pub workflow: Workflow,
     pub trigger: RunTrigger,
+    /// Where the run's file is now, after any Rename or Move.
+    #[serde(default)]
+    pub file: Option<RunFile>,
     pub status: RunStatus,
     /// When it was queued. RFC 3339, with the Mac's offset.
     pub started_at: String,
@@ -37,6 +41,20 @@ pub struct Run {
     /// Every `{variable}` so far.
     pub values: BTreeMap<String, RunValue>,
     pub error: Option<RunError>,
+    /// What undoing the run did, once it's undone.
+    #[serde(default)]
+    pub undo: Option<UndoReport>,
+}
+
+/// What `undo_run` returns.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UndoResult {
+    pub run: Run,
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub report: UndoReport,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

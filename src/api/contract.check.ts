@@ -39,6 +39,9 @@ import type { StepOutcome as GStepOutcome } from "./generated/StepOutcome";
 import type { StepRun as GStepRun } from "./generated/StepRun";
 import type { TriggerKind as GTriggerKind } from "./generated/TriggerKind";
 import type { ValueKind as GValueKind } from "./generated/ValueKind";
+import type { UndoReport as GUndoReport } from "./generated/UndoReport";
+import type { LeftAlone as GLeftAlone } from "./generated/LeftAlone";
+import type { UndoResult as GUndoResult } from "./generated/UndoResult";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Check<T extends true> = T;
@@ -82,4 +85,7 @@ export type ContractChecks = [
   Check<Same<GStepRun, T.StepRun>>,
   Check<Same<GTriggerKind, T.TriggerKind>>,
   Check<Same<GValueKind, T.ValueKind>>,
+  Check<Same<GUndoReport, T.UndoReport>>,
+  Check<Same<GLeftAlone, T.LeftAlone>>,
+  Check<Same<GUndoResult, T.UndoResult>>,
 ];

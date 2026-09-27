@@ -374,11 +374,13 @@ async fn a_scheduled_workflow_isnt_run_on_files() {
 async fn a_step_the_engine_cant_run_yet_fails_the_run_and_says_so() {
     let mut h = engine();
     let wf = h.workflow(
-        "Renames",
+        "Asks",
         steps(json!([
-            { "id": "t", "type": "runNow", "next": "r" },
-            { "id": "r", "title": "Rename it", "type": "rename", "template": "{file} done", "next": "n" },
-            { "id": "n", "type": "notify", "message": "Renamed", "next": null },
+            { "id": "t", "type": "runNow", "next": "q" },
+            { "id": "q", "title": "Ask first", "type": "askMe", "question": "File {file}?",
+              "answers": [{ "id": "y", "label": "Yes" }, { "id": "n", "label": "No" }],
+              "branches": { "y": "m" } },
+            { "id": "m", "type": "notify", "message": "Filed", "next": null },
         ])),
     );
     let file = h.file("a.txt");
@@ -387,24 +389,20 @@ async fn a_step_the_engine_cant_run_yet_fails_the_run_and_says_so() {
     let run = h.until(&id, RunStatus::Failed).await;
 
     let failed = run.steps.last().unwrap();
-    assert_eq!(failed.step_id, "r");
+    assert_eq!(failed.step_id, "q");
     assert_eq!(failed.outcome, StepOutcome::Failed);
     let error = run.error.unwrap();
-    assert_eq!(error.step_id.as_deref(), Some("r"));
+    assert_eq!(error.step_id.as_deref(), Some("q"));
     assert_eq!(
         error.message,
-        "Rename steps can't run in this version of FolderFlow yet."
-    );
-    assert!(
-        h.home.join("a.txt").exists(),
-        "the file is left where it was"
+        "Ask me steps can't run in this version of FolderFlow yet."
     );
     // The failure is announced; the Notify after it never ran.
     assert_eq!(
         h.notes.shown.lock().unwrap().clone(),
         [(
-            "Renames".to_string(),
-            "Rename it failed on a.txt: Rename steps can't run in this version of FolderFlow yet."
+            "Asks".to_string(),
+            "Ask first failed on a.txt: Ask me steps can't run in this version of FolderFlow yet."
                 .to_string()
         )]
     );

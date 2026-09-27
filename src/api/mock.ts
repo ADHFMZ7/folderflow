@@ -285,8 +285,9 @@ export function createMockApi(options: MockOptions = {}): Api {
       if (!files.length) throw new ApiError("invalid", "Choose at least one file to run on.");
       const queued = files.map((path, i): Run => ({
         id: crypto.randomUUID(), workflowId, revision: workflow.revision, workflow: structuredClone(workflow),
-        trigger: { kind: "runNow", file: { path, inode: 1000 + runRecords.length + i } }, status: "queued",
-        startedAt: new Date().toISOString(), endedAt: null, steps: [], values: {}, error: null,
+        trigger: { kind: "runNow", file: { path, inode: 1000 + runRecords.length + i } },
+        file: { path, inode: 1000 + runRecords.length + i }, status: "queued",
+        startedAt: new Date().toISOString(), endedAt: null, steps: [], values: {}, error: null, undo: null,
       }));
       for (const run of queued) {
         runRecords.push(run);

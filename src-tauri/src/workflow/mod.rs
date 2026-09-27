@@ -2,6 +2,7 @@
 //! the workflow list shows. Reading and writing files is in storage::workflows.
 
 pub mod format;
+pub mod paths;
 pub mod templates;
 pub mod validate;
 

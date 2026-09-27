@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod engine;
+pub mod files;
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

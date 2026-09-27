@@ -1,5 +1,6 @@
 // The mock's engine: runs a workflow's steps the way the Rust core does
-// (src-tauri/src/engine), for the steps the core can run so far.
+// (src-tauri/src/engine), for the steps the core can run so far. File steps
+// change nothing, since there are no files; they record what they would do.
 
 import type { ConditionOp, Run, RunValue, Step, StepRun, Workflow } from "./types";
 
@@ -29,6 +30,27 @@ export function fileValues(path: string, added: Date): Record<string, RunValue> 
 export function fill(template: string, values: Record<string, RunValue>): string {
   return template.replace(/\{([A-Za-z0-9_]{1,32})\}/g, (whole, name: string) => values[name]?.value ?? whole);
 }
+
+/** A value fit for a file name, as the core makes it: / and : become -, leading dots and spaces go. */
+export function safe(value: string): string {
+  return value.replace(/[/:]/g, "-").replace(/[\u0000-\u001f]/g, " ").replace(/^[. ]+/, "").trimEnd().slice(0, 200).trimEnd();
+}
+
+/** Like fill, for names and paths; throws the core's message for a value that ends up empty. */
+export function fillName(template: string, values: Record<string, RunValue>): string {
+  return template.replace(/\{([A-Za-z0-9_]{1,32})\}/g, (whole, name: string) => {
+    if (!(name in values)) return whole;
+    const value = safe(values[name].value);
+    if (!value) throw new Error(`{${name}} is empty, so it can't be used in a file or folder name.`);
+    return value;
+  });
+}
+
+const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+const folderOf = (path: string) => path.slice(0, Math.max(path.lastIndexOf("/"), 1));
+const stemOf = (name: string) => (name.lastIndexOf(".") > 0 ? name.slice(0, name.lastIndexOf(".")) : name);
+const extOf = (name: string) => (name.lastIndexOf(".") > 0 ? name.slice(name.lastIndexOf(".")) : "");
+const andList = (items: string[]) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 
 const NUMBER = /^-?(\d+\.?\d*|\.\d+)$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -65,6 +87,8 @@ export function execute(run: Run, workflow: Workflow, notify: (title: string, bo
     };
     run.steps.push(entry);
     current = null;
+    const file = run.file?.path ?? "";
+    try {
     switch (step.type) {
       case "fileAdded":
       case "runNow":
@@ -83,16 +107,48 @@ export function execute(run: Run, workflow: Workflow, notify: (title: string, bo
         break;
       case "stop":
         break;
-      default: {
-        const message = `${NAMES[step.type]} steps can't run in this version of FolderFlow yet.`;
-        entry.outcome = "failed";
-        entry.message = message;
-        entry.endedAt = now();
-        run.error = { stepId: step.id, message };
-        run.status = "failed";
-        run.endedAt = now();
-        return;
+      case "rename": {
+        const to = `${folderOf(file)}/${fillName(step.template, run.values)}${extOf(nameOf(file))}`;
+        entry.message = `Renamed ${nameOf(file)} to ${nameOf(to)}.`;
+        entry.values = { newName: text(stemOf(nameOf(to))) };
+        run.file = { path: to, inode: run.file!.inode };
+        current = step.next;
+        break;
       }
+      case "move": {
+        const folder = fillName(step.to, run.values);
+        entry.message = `${step.mode === "move" ? "Moved" : "Copied"} ${nameOf(file)} to ${folder}.`;
+        entry.values = { newFolder: text(folder) };
+        if (step.mode === "move") run.file = { path: `${folder}/${nameOf(file)}`, inode: run.file!.inode };
+        current = step.next;
+        break;
+      }
+      case "createFile": {
+        const folder = step.folder?.trim() ? fillName(step.folder, run.values) : folderOf(file);
+        entry.message = `Created ${fillName(step.name, run.values)} in ${folder}.`;
+        current = step.next;
+        break;
+      }
+      case "addRow":
+        entry.message = `Added a row to ${nameOf(fillName(step.file, run.values))}.`;
+        current = step.next;
+        break;
+      case "tag":
+        entry.message = `Tagged ${nameOf(file)} ${andList(step.tags.map((t) => fill(t, run.values)))}.`;
+        current = step.next;
+        break;
+      default:
+        throw new Error(`${NAMES[step.type]} steps can't run in this version of FolderFlow yet.`);
+    }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      entry.outcome = "failed";
+      entry.message = message;
+      entry.endedAt = now();
+      run.error = { stepId: step.id, message };
+      run.status = "failed";
+      run.endedAt = now();
+      return;
     }
     entry.endedAt = now();
     Object.assign(run.values, entry.values);
