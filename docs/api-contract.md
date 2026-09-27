@@ -34,6 +34,7 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `clearNotices()` | `clear_notices` | none | nothing |
 | `getActivity()` | `get_activity` | none | `Activity` |
 | `pauseAll(paused)` | `pause_all` | `paused` | `Activity` |
+| `tryOnFile(workflow, file, answers?)` | `try_on_file` | `workflow`, `file`, `answers` (`{}` when left out) | `TryResult` |
 
 `updateSettings` with `openAtLogin` also adds or removes the login item (see `docs/engine.md`, "Background").
 

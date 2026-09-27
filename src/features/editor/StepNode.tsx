@@ -6,7 +6,9 @@ import { exitsOf, isTrigger, type StepNode as StepNodeType } from "./graph";
 import { infoFor } from "./catalog";
 import styles from "./Studio.module.css";
 
-export function StepNode({ data: { step, problems }, selected }: NodeProps<StepNodeType>) {
+const TRIED = { done: "Tried", waiting: "Waiting for your answer", failed: "Stopped here", running: "Tried" } as const;
+
+export function StepNode({ data: { step, problems, tried }, selected }: NodeProps<StepNodeType>) {
   const info = infoFor(step.type);
   const exits = exitsOf(step);
   const cls = [styles.node, styles[`kind-${info.kind}`], selected && styles.selected, problems.length > 0 && styles.hasProblem]
@@ -22,6 +24,7 @@ export function StepNode({ data: { step, problems }, selected }: NodeProps<StepN
       </div>
       <div className={styles.nodeTitle}>{step.title}</div>
       {problems[0] && <div className={styles.nodeProblem}>{problems[0].message}</div>}
+      {tried && <div className={styles.triedChip} data-outcome={tried.outcome}>{TRIED[tried.outcome]}</div>}
       {exits.length > 1 && (
         <div className={styles.branchLabels} aria-hidden>
           {exits.map((e) => <span key={e.handle}>{e.label}</span>)}

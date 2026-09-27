@@ -18,6 +18,7 @@ import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
 import { RunNow } from "./RunNow";
 import { StepNode } from "./StepNode";
+import { TryPanel, triedSteps, useTry } from "./Try";
 import { useEditor, type SaveStatus } from "./useEditor";
 import styles from "./Studio.module.css";
 
@@ -57,7 +58,9 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, setEnabled, re
   useShortcuts({ save: flush, undo, redo });
   const canvasRef = useRef<HTMLElement>(null);
 
-  const flow = useMemo(() => toFlow(draft, problems), [draft, problems]);
+  const trying = useTry(draft);
+  const tried = useMemo(() => triedSteps(trying.trial), [trying.trial]);
+  const flow = useMemo(() => toFlow(draft, problems, tried), [draft, problems, tried]);
   const nodes = flow.nodes.map((n) => ({ ...n, measured: measured[n.id], selected: n.id === selected }));
   const edges = flow.edges.map((e) => ({ ...e, selected: e.id === selectedEdge }));
   const selectedStep = draft.steps.find((s) => s.id === selected) ?? null;
@@ -166,7 +169,10 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, setEnabled, re
         )}
         <span className={styles.spacer} />
         <RunNow workflow={draft} problems={problems.length} flush={flush} />
-        <Button variant="secondary" disabled title="Trying a workflow on a file comes with the engine that runs workflows.">Try on a file</Button>
+        {trigger && trigger.type !== "schedule" && (
+          <Button variant="secondary" onClick={() => void trying.start(() => { setSelected(null); setShowProblems(false); })}
+            title="Run this version on a file you choose, to see what each step would do. Nothing is changed.">Try on a file</Button>
+        )}
         <span title={offWhy}>
           <Toggle label="On" checked={draft.enabled} onChange={setEnabled} disabled={!!offWhy} />
         </span>
@@ -212,6 +218,10 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, setEnabled, re
             <Controls showInteractive={false} position="bottom-left" />
             <MiniMap pannable zoomable position="top-left" style={{ width: 140, height: 100 }} />
           </ReactFlow>
+          {!selectedStep && !showProblems && trying.trial && (
+            <TryPanel {...trying} trial={trying.trial} draft={draft}
+              onSelect={(stepId) => { setSelected(stepId); rf.fitView({ nodes: [{ id: stepId }], maxZoom: 1 }); }} />
+          )}
           {(selectedStep || showProblems) && (
             <Inspector workflow={draft} step={selectedStep} problems={problems} stepTitle={stepTitle}
               onChange={(step) => edit((w) => updateStep(w, step), `step:${step.id}`)}

@@ -44,6 +44,14 @@ describe("exitsOf", () => {
 });
 
 describe("toFlow", () => {
+  it("marks the steps a try reached, and the path it took between them", () => {
+    const tried = { t: { outcome: "done" as const, branch: null }, c: { outcome: "done" as const, branch: "c1" }, r: { outcome: "failed" as const, branch: null } };
+    const { nodes, edges } = toFlow(sample(), [], tried);
+    expect(nodes.find((n) => n.id === "r")?.data.tried).toEqual({ outcome: "failed", branch: null });
+    expect(nodes.find((n) => n.id === "x")?.data.tried).toBeUndefined();
+    expect(edges.filter((e) => e.className === "tried").map((e) => e.id)).toEqual(["t:next", "c:c1"]);
+  });
+
   it("makes a node per step and an edge per connected exit", () => {
     const { nodes, edges } = toFlow(sample(), []);
     expect(nodes.map((n) => [n.id, n.position])).toEqual([["t", at], ["c", { x: 0, y: 160 }], ["r", { x: 0, y: 320 }], ["x", { x: 300, y: 320 }]]);

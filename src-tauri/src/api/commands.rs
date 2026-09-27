@@ -1,6 +1,7 @@
 //! The Tauri commands: each one hands its arguments to `Backend` and nothing more.
 //! They are async so none of them runs on, and blocks, the main thread.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use tauri::{Manager, State};
@@ -16,7 +17,7 @@ use super::types::{
 use super::Backend;
 use crate::engine::notices::Notice;
 use crate::engine::runs::{NeedsYouItem, Run, RunQuery, RunSummary, UndoResult};
-use crate::engine::{Activity, Engine};
+use crate::engine::{Activity, Engine, TryResult};
 use crate::storage::settings::Settings;
 use crate::workflow::{Problem, SaveResult, Workflow};
 
@@ -263,6 +264,18 @@ pub async fn get_activity(engine: State<'_, Engine>) -> Result<Activity, ApiErro
 #[tauri::command]
 pub async fn pause_all(engine: State<'_, Engine>, paused: bool) -> Result<Activity, ApiError> {
     engine.pause_all(paused)
+}
+
+/// Try on a file: the workflow as the editor has it, on one file, changing
+/// nothing. See docs/engine.md, "Try on a file".
+#[tauri::command]
+pub async fn try_on_file(
+    engine: State<'_, Engine>,
+    workflow: Workflow,
+    file: String,
+    answers: BTreeMap<String, String>,
+) -> Result<TryResult, ApiError> {
+    engine.try_on_file(workflow, file, answers).await
 }
 
 #[tauri::command]

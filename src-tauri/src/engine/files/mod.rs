@@ -12,8 +12,11 @@
 //! - Every action is written to the run's journal before and after, so a crash
 //!   at any point is recovered (`recover`) and every action can be undone
 //!   (`undo`).
+//!
+//! `Plan` works the same actions out without doing them, for Try on a file.
 
 mod journal;
+mod plan;
 pub mod sys;
 mod undo;
 
@@ -27,7 +30,39 @@ use sys::Stamp;
 
 use crate::workflow::{paths, validate::variables_in, StepKind, Workflow};
 
+pub use plan::Plan;
 pub use undo::{recover, recover_all, undo, LeftAlone, Recovered, UndoReport};
+
+/// The file actions a run's steps take: done by `Files`, or worked out
+/// without touching the disk by `Plan`.
+pub trait Actions: Send {
+    /// Renames the file, keeping its extension. Returns where it is now.
+    fn rename(&mut self, file: &Path, new_stem: &str) -> Result<PathBuf, FileError>;
+    /// Moves the file into `folder`, creating it if needed. Returns where it is now.
+    fn move_file(&mut self, file: &Path, folder: &Path) -> Result<PathBuf, FileError>;
+    /// Copies the file into `folder`, creating it if needed. Returns the copy.
+    fn copy_file(&mut self, file: &Path, folder: &Path) -> Result<PathBuf, FileError>;
+    /// Writes a new file in `folder`. Returns where it was written.
+    fn create_file(
+        &mut self,
+        folder: &Path,
+        name: &str,
+        contents: &str,
+    ) -> Result<PathBuf, FileError>;
+    /// Adds one row to a CSV file, starting it with `headers` if it's new.
+    fn add_row(
+        &mut self,
+        csv: &Path,
+        values: &[String],
+        headers: Option<&[String]>,
+    ) -> Result<(), FileError>;
+    /// Adds Finder tags the file doesn't have yet. Returns the ones added.
+    fn tag(&mut self, file: &Path, tags: &[String]) -> Result<Vec<String>, FileError>;
+    /// Whether anything is at `path`, as the actions so far left it.
+    fn exists(&self, path: &Path) -> bool {
+        exists(path)
+    }
+}
 
 /// Removes a run's journal and spreadsheet backups, once its run is removed
 /// from the history: it can no longer be undone.
@@ -255,7 +290,7 @@ impl Files {
         self.crash = Some(point);
     }
 
-    /// Renames the file, keeping its extension. Returns where it is now.
+    /// See `Actions::rename`.
     pub fn rename(&mut self, file: &Path, new_stem: &str) -> Result<PathBuf, FileError> {
         let (folder, name) = self.source(file)?;
         check_name(new_stem)?;
@@ -264,7 +299,7 @@ impl Files {
         self.place(&from, &folder, new_stem, ext.as_deref())
     }
 
-    /// Moves the file into `folder`, creating it if needed. Returns where it is now.
+    /// See `Actions::move_file`.
     pub fn move_file(&mut self, file: &Path, folder: &Path) -> Result<PathBuf, FileError> {
         let (from_folder, name) = self.source(file)?;
         let to_folder = self.grants.allow(folder)?;
@@ -277,7 +312,7 @@ impl Files {
         self.place(&from, &to_folder, &stem, ext.as_deref())
     }
 
-    /// Copies the file into `folder`, creating it if needed. Returns the copy.
+    /// See `Actions::copy_file`.
     pub fn copy_file(&mut self, file: &Path, folder: &Path) -> Result<PathBuf, FileError> {
         let (from_folder, name) = self.source(file)?;
         let to_folder = self.grants.allow(folder)?;
@@ -325,7 +360,7 @@ impl Files {
         Err(too_many(&name))
     }
 
-    /// Writes a new file in `folder`. Returns where it was written.
+    /// See `Actions::create_file`.
     pub fn create_file(
         &mut self,
         folder: &Path,
@@ -359,7 +394,7 @@ impl Files {
         Err(too_many(name))
     }
 
-    /// Adds one row to a CSV file, starting it with `headers` if it's new.
+    /// See `Actions::add_row`.
     pub fn add_row(
         &mut self,
         csv: &Path,
@@ -443,19 +478,12 @@ impl Files {
         )))
     }
 
-    /// Adds Finder tags the file doesn't have yet. Returns the ones added.
+    /// See `Actions::tag`.
     pub fn tag(&mut self, file: &Path, tags: &[String]) -> Result<Vec<String>, FileError> {
         let (folder, name) = self.source(file)?;
         let path = folder.join(&name);
         let have = sys::tags(&path).map_err(|e| io_error(&name, "read the tags of", e))?;
-        let mut add: Vec<String> = Vec::new();
-        for tag in tags {
-            let tag = tag.trim().replace('\n', " ");
-            let known = |t: &String| t.eq_ignore_ascii_case(&tag);
-            if !tag.is_empty() && !have.iter().any(known) && !add.iter().any(known) {
-                add.push(tag);
-            }
-        }
+        let add = new_tags(&have, tags);
         if add.is_empty() {
             return Ok(add);
         }
@@ -678,6 +706,55 @@ impl Files {
             }
         }
     }
+}
+
+impl Actions for Files {
+    fn rename(&mut self, file: &Path, new_stem: &str) -> Result<PathBuf, FileError> {
+        Files::rename(self, file, new_stem)
+    }
+
+    fn move_file(&mut self, file: &Path, folder: &Path) -> Result<PathBuf, FileError> {
+        Files::move_file(self, file, folder)
+    }
+
+    fn copy_file(&mut self, file: &Path, folder: &Path) -> Result<PathBuf, FileError> {
+        Files::copy_file(self, file, folder)
+    }
+
+    fn create_file(
+        &mut self,
+        folder: &Path,
+        name: &str,
+        contents: &str,
+    ) -> Result<PathBuf, FileError> {
+        Files::create_file(self, folder, name, contents)
+    }
+
+    fn add_row(
+        &mut self,
+        csv: &Path,
+        values: &[String],
+        headers: Option<&[String]>,
+    ) -> Result<(), FileError> {
+        Files::add_row(self, csv, values, headers)
+    }
+
+    fn tag(&mut self, file: &Path, tags: &[String]) -> Result<Vec<String>, FileError> {
+        Files::tag(self, file, tags)
+    }
+}
+
+/// The tags in `tags` not in `have`, ignoring case, trimmed, each once.
+fn new_tags(have: &[String], tags: &[String]) -> Vec<String> {
+    let mut add: Vec<String> = Vec::new();
+    for tag in tags {
+        let tag = tag.trim().replace('\n', " ");
+        let known = |t: &String| t.eq_ignore_ascii_case(&tag);
+        if !tag.is_empty() && !have.iter().any(known) && !add.iter().any(known) {
+            add.push(tag);
+        }
+    }
+    add
 }
 
 enum Failed {

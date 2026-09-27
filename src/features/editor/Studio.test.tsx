@@ -301,11 +301,6 @@ describe("studio", () => {
       expect(screen.getByRole("status", { name: "Changes not live" })).toBeInTheDocument();
     });
   });
-
-  it("says why trying isn't available yet", async () => {
-    await openWorkflow();
-    expect(screen.getByRole("button", { name: "Try on a file" })).toBeDisabled();
-  });
 });
 
 describe("the On switch", () => {
@@ -407,6 +402,81 @@ describe("run now", () => {
   it("isn't offered for a workflow that runs on a schedule", async () => {
     await openWorkflow("cleanup");
     expect(screen.queryByRole("button", { name: "Run…" })).not.toBeInTheDocument();
+  });
+});
+
+describe("try on a file", () => {
+  const runNow = (next: string | null): Step => ({ id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next });
+  const rename: Step = { id: "r", type: "rename", title: "Name it", position: { x: 0, y: 160 }, template: "Filed {file}", next: "n" };
+  const notify: Step = { id: "n", type: "notify", title: "Say hello", position: { x: 0, y: 320 }, message: "Hello {file}", next: null };
+  const tryIt = () => fireEvent.click(screen.getByRole("button", { name: "Try on a file" }));
+  const panel = () => screen.findByRole("region", { name: "Try on Scan_0042.pdf" });
+
+  it("shows what each step would do, and changes and records nothing", async () => {
+    const { api, wf } = await openWith([runNow("r"), rename, notify], "Name it", { chosenFiles: ["~/Downloads/Scan_0042.pdf"] });
+
+    tryIt();
+
+    const tried = await panel();
+    expect(within(tried).getByText("Nothing was changed. This is what a run would do.")).toBeInTheDocument();
+    expect(within(tried).getByText("Would rename Scan_0042.pdf to Filed Scan_0042.pdf.")).toBeInTheDocument();
+    expect(within(tried).getByText("Would show the notification \"Hello Scan_0042\".")).toBeInTheDocument();
+    expect(within(canvas()).getAllByText("Tried")).toHaveLength(3);
+    expect(await api.listRuns({ workflowId: wf.id })).toEqual([]);
+    expect(await api.listNotices()).toEqual([]);
+
+    fireEvent.click(within(tried).getByRole("button", { name: "Close the try" }));
+    expect(screen.queryByRole("region", { name: "Try on Scan_0042.pdf" })).not.toBeInTheDocument();
+    expect(within(canvas()).queryByText("Tried")).not.toBeInTheDocument();
+  });
+
+  it("shows the values a step produced", async () => {
+    await openWith([runNow("r"), rename, notify], "Name it");
+    tryIt();
+    const tried = await panel();
+
+    fireEvent.click(within(tried).getByRole("button", { name: "Values of Name it" }));
+
+    expect(within(tried).getByText("newName")).toBeInTheDocument();
+    expect(within(tried).getByText("Filed Scan_0042")).toBeInTheDocument();
+  });
+
+  it("asks inside the try, and carries on down the answer's branch", async () => {
+    const ask: Step = { id: "q", type: "askMe", title: "Log it?", position: { x: 0, y: 160 }, question: "Log {file}?",
+      answers: [{ id: "log", label: "Log it" }, { id: "skip", label: "Skip" }], branches: { log: "r" } };
+    const { api } = await openWith([runNow("q"), ask, { ...rename, next: null }], "Log it?");
+
+    tryIt();
+    const tried = await panel();
+    expect(within(tried).getByText("Log Scan_0042?")).toBeInTheDocument();
+    fireEvent.click(within(tried).getByRole("button", { name: "Log it" }));
+
+    expect(await within(tried).findByText("You answered Log it.")).toBeInTheDocument();
+    expect(within(tried).getByText("Would rename Scan_0042.pdf to Filed Scan_0042.pdf.")).toBeInTheDocument();
+    expect(await api.listNeedsYou()).toEqual([]);
+  });
+
+  it("stops at a problem on the path it takes, and says where", async () => {
+    await openWith([runNow("r"), { ...rename, template: "" }, notify], "Name it");
+
+    tryIt();
+
+    const tried = await panel();
+    expect(within(tried).getByText(/^Stopped at Name it: /)).toBeInTheDocument();
+    expect(within(canvas()).getByText("Stopped here")).toBeInTheDocument();
+    expect(within(tried).queryByText(/Would show the notification/)).not.toBeInTheDocument();
+  });
+
+  it("does nothing when the picker is cancelled", async () => {
+    await openWith([runNow("r"), rename, notify], "Name it", { chosenFiles: [] });
+    tryIt();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("region", { name: /^Try on/ })).not.toBeInTheDocument();
+  });
+
+  it("isn't offered for a workflow that runs on a schedule", async () => {
+    await openWorkflow("cleanup");
+    expect(screen.queryByRole("button", { name: "Try on a file" })).not.toBeInTheDocument();
   });
 });
 

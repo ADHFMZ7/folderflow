@@ -1,10 +1,12 @@
 //! Runs one run: starts at the trigger, follows `next` or the branch each step
-//! chose, fills in `{variables}`, and records what every step did.
+//! chose, fills in `{variables}`, and records what every step did. A try on a
+//! file runs the same way, with its file actions worked out, not done.
 
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use super::files::{sys::Stamp, Files};
+use super::files::{sys::Stamp, Actions};
 use super::notices::{NoticeKind, Notices};
 use super::runs::{Question, Run, RunError, RunFile, RunValue, StepOutcome, StepRun, ValueKind};
 use super::values::{self, fill, fill_name, Values};
@@ -36,14 +38,22 @@ pub enum Ended {
 }
 
 /// What a run works with: the home folder `~` stands for, the ports, whether
-/// the app is quitting, and the run's file actions, confined to the folders
-/// its workflow names.
+/// the app is quitting, the run's file actions, confined to the folders its
+/// workflow names, and for a try, what it knows so far.
 pub struct Ctx<'a> {
     pub home: &'a Path,
     pub ports: &'a Ports,
     pub notices: &'a Notices,
     pub stopping: &'a AtomicBool,
-    pub files: Files,
+    pub files: Box<dyn Actions + 'a>,
+    pub trying: Option<Trying<'a>>,
+}
+
+/// A try on a file: the person's answers so far, by Ask me step, and each
+/// step's first problem, which stops the try if its path reaches the step.
+pub struct Trying<'a> {
+    pub answers: &'a BTreeMap<String, String>,
+    pub problems: &'a HashMap<String, String>,
 }
 
 /// Runs `run` to its end or its next question, calling `save` after each
@@ -192,6 +202,10 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
         fill(text, &run.values).map_err(|name| format!("{{{name}}} has no value at this step."))
     };
     let home = ctx.home;
+    if let Some(problem) = ctx.trying.as_ref().and_then(|t| t.problems.get(&step.id)) {
+        return Err(problem.clone());
+    }
+    let trying = ctx.trying.is_some();
     match &step.kind {
         StepKind::RunNow { next } | StepKind::FileAdded { next, .. } => {
             let file = run.trigger.file.as_ref().ok_or("This run has no file.")?;
@@ -229,6 +243,12 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
         }
         StepKind::Notify { message, next } => {
             let body = filled(message, run)?;
+            if trying {
+                return Ok(Done {
+                    message: Some(format!("Would show the notification \"{body}\".")),
+                    ..Done::next(next)
+                });
+            }
             let shown = ctx
                 .notices
                 .tell(NoticeKind::Message, run, &body, ctx.ports.now());
@@ -244,6 +264,25 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
             ..Done::next(&None)
         }),
         StepKind::AskMe {
+            answers, branches, ..
+        } if ctx
+            .trying
+            .as_ref()
+            .is_some_and(|t| t.answers.contains_key(&step.id)) =>
+        {
+            let given = &ctx.trying.as_ref().expect("checked above").answers[&step.id];
+            let answer = answers
+                .iter()
+                .find(|a| &a.id == given)
+                .ok_or("That isn't one of the answers to this question.")?;
+            Ok(Done {
+                exit: Exit::Next(branches.get(&answer.id).cloned()),
+                branch: Some(answer.id.clone()),
+                values: Values::new(),
+                message: Some(format!("You answered {}.", answer.label)),
+            })
+        }
+        StepKind::AskMe {
             question, answers, ..
         } => Ok(Done {
             exit: Exit::Ask(Question {
@@ -258,29 +297,38 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
             let stem = fill_name(template, &run.values)?;
             let to = ctx.files.rename(&file, &stem).map_err(|e| e.0)?;
             moved_to(run, &to);
+            let said = if trying { "Would rename" } else { "Renamed" };
             Ok(Done {
                 values: text_value("newName", stem_of(&to)),
-                message: Some(format!("Renamed {} to {}.", name_of(&file), name_of(&to))),
+                message: Some(format!("{said} {} to {}.", name_of(&file), name_of(&to))),
                 ..Done::next(next)
             })
         }
         StepKind::Move { to, mode, next } => {
             let file = current_file(run)?;
             let folder = full_path(&fill_name(to, &run.values)?, home)?;
+            let new_folder = !ctx.files.exists(&folder);
             let (placed, verb) = match mode {
                 MoveMode::Move => {
                     let placed = ctx.files.move_file(&file, &folder).map_err(|e| e.0)?;
                     moved_to(run, &placed);
-                    (placed, "Moved")
+                    (placed, if trying { "Would move" } else { "Moved" })
                 }
                 MoveMode::Copy => (
                     ctx.files.copy_file(&file, &folder).map_err(|e| e.0)?,
-                    "Copied",
+                    if trying { "Would copy" } else { "Copied" },
                 ),
             };
             let shown = shown_folder(&placed, home);
+            let mut how = String::new();
+            if trying && new_folder {
+                how.push_str(" (the folder will be created)");
+            }
+            if trying && name_of(&placed) != name_of(&file) {
+                how.push_str(&format!(", as {}", name_of(&placed)));
+            }
             Ok(Done {
-                message: Some(format!("{verb} {} to {shown}.", name_of(&file))),
+                message: Some(format!("{verb} {} to {shown}{how}.", name_of(&file))),
                 values: text_value("newFolder", shown),
                 ..Done::next(next)
             })
@@ -300,13 +348,19 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
             };
             let name = fill_name(name, &run.values)?;
             let contents = filled(contents, run)?;
+            let new_folder = !ctx.files.exists(&folder);
             let made = ctx
                 .files
                 .create_file(&folder, &name, &contents)
                 .map_err(|e| e.0)?;
+            let (said, how) = match (trying, new_folder) {
+                (false, _) => ("Created", ""),
+                (true, false) => ("Would create", ""),
+                (true, true) => ("Would create", " (the folder will be created)"),
+            };
             Ok(Done {
                 message: Some(format!(
-                    "Created {} in {}.",
+                    "{said} {} in {}{how}.",
                     name_of(&made),
                     shown_folder(&made, home)
                 )),
@@ -324,11 +378,21 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
                 .iter()
                 .map(|c| filled(c, run))
                 .collect::<Result<Vec<_>, _>>()?;
+            let new_file = !ctx.files.exists(&csv);
             ctx.files
                 .add_row(&csv, &row, headers.as_deref())
                 .map_err(|e| e.0)?;
+            let (name, row) = (name_of(&csv), row.join(", "));
+            let message = match (trying, new_file, headers.is_some()) {
+                (false, ..) => format!("Added a row to {name}."),
+                (true, false, _) => format!("Would add the row {row} to {name}."),
+                (true, true, true) => {
+                    format!("Would create {name}, with its headings and the row {row}.")
+                }
+                (true, true, false) => format!("Would create {name}, with the row {row}."),
+            };
             Ok(Done {
-                message: Some(format!("Added a row to {}.", name_of(&csv))),
+                message: Some(message),
                 ..Done::next(next)
             })
         }
@@ -339,10 +403,11 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
                 .map(|t| filled(t, run))
                 .collect::<Result<Vec<_>, _>>()?;
             let added = ctx.files.tag(&file, &tags).map_err(|e| e.0)?;
-            let message = if added.is_empty() {
-                format!("{} already had those tags.", name_of(&file))
-            } else {
-                format!("Tagged {} {}.", name_of(&file), and_list(&added))
+            let message = match (trying, added.is_empty()) {
+                (false, true) => format!("{} already had those tags.", name_of(&file)),
+                (false, false) => format!("Tagged {} {}.", name_of(&file), and_list(&added)),
+                (true, true) => format!("{} already has those tags.", name_of(&file)),
+                (true, false) => format!("Would tag {} {}.", name_of(&file), and_list(&added)),
             };
             Ok(Done {
                 message: Some(message),
