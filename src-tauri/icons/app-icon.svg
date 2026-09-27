@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The Vela app icon: the B1 boat on Apple's macOS icon grid (an 824 px
+       rounded square in a 1024 px canvas). Render with `npx tauri icon`. -->
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#F3EDE2" filter="url(#shadow)"/>
+  <g transform="translate(234 242) scale(5.44)" fill="#8A3B22">
+    <path d="M50 10 C 66 28, 76 50, 78 68 L50 68 Z"/>
+    <path d="M46 22 L46 68 L24 68 C 30 52, 37 36, 46 22 Z"/>
+    <path d="M16 74 H86 C 82 84, 72 89, 62 89 H38 C 28 89, 20 84, 16 74 Z"/>
+  </g>
+</svg>
