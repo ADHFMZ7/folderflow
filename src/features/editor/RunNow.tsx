@@ -1,5 +1,5 @@
 // "Run…": runs the saved workflow on files the person picks, and says
-// in the toolbar how it went. The run history comes with its own page later.
+// in the toolbar how it went. Each run is on the History page.
 
 import { useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
@@ -8,7 +8,8 @@ import { ApiError, type RunStatus, type RunSummary, type Workflow } from "../../
 import { Button } from "../../ui";
 import styles from "./Studio.module.css";
 
-const FINISHED: RunStatus[] = ["done", "failed", "interrupted", "undone"];
+/** Finished, or paused on a question: either way, the toolbar can say how it went. */
+const SETTLED: RunStatus[] = ["done", "failed", "interrupted", "undone", "waiting"];
 
 type Props = {
   workflow: Workflow;
@@ -42,10 +43,13 @@ export function RunNow({ workflow, problems, flush }: Props) {
       settled = true;
       stop();
       const runs = await Promise.all(queued.map((r) => api.getRun(r.id)));
-      setStatus(outcome(names, runs.map((r) => (r.status === "done" ? "" : r.error?.message ?? `The run was ${r.status}.`))));
+      const waiting = runs.filter((r) => r.status === "waiting").length;
+      setStatus(waiting
+        ? `${waiting === runs.length && runs.length === 1 ? "It's waiting" : `${waiting} of ${runs.length} runs are waiting`} for your answer in Needs you`
+        : outcome(names, runs.map((r) => (r.status === "done" ? "" : r.error?.message ?? `The run was ${r.status}.`))));
     };
     const stop = api.onRunChanged((change) => {
-      if (!FINISHED.includes(change.status)) return;
+      if (!SETTLED.includes(change.status)) return;
       finished.add(change.runId);
       void settle();
     });

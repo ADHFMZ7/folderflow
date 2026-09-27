@@ -50,6 +50,12 @@ export function createTauriApi(): Api {
     runNow: (workflowId, files) => call("run_now", { workflowId, files }),
     listRuns: (query = {}) => call("list_runs", { query }),
     getRun: (id) => call("get_run", { id }),
+    listNeedsYou: () => call("list_needs_you"),
+    answer: (runId, branchId) => call("answer", { runId, branchId }),
+    retryRun: (runId) => call("retry_run", { runId }),
+    resumeRun: (runId) => call("resume_run", { runId }),
+    undoRun: (runId) => call("undo_run", { runId }),
+    dismissRun: (runId) => call("dismiss_run", { runId }),
     onRunChanged(listener) {
       // listen() resolves later; a stop that comes first unlistens as soon as it does.
       let stopped = false;

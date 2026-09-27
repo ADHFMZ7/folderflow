@@ -377,12 +377,12 @@ async fn a_step_the_engine_cant_run_yet_fails_the_run_and_says_so() {
         "Asks",
         steps(json!([
             { "id": "t", "type": "runNow", "next": "q" },
-            { "id": "q", "title": "Ask first", "type": "askMe", "question": "File {file}?",
-              "answers": [{ "id": "y", "label": "Yes" }, { "id": "n", "label": "No" }],
-              "branches": { "y": "m" } },
+            { "id": "q", "title": "Sum up first", "type": "write", "instruction": "Sum up {file}",
+              "saveAs": "summary", "next": "m" },
             { "id": "m", "type": "notify", "message": "Filed", "next": null },
         ])),
     );
+    h.set_models();
     let file = h.file("a.txt");
 
     let id = h.engine.run_now(&wf.id, vec![file]).unwrap()[0].id.clone();
@@ -395,14 +395,14 @@ async fn a_step_the_engine_cant_run_yet_fails_the_run_and_says_so() {
     assert_eq!(error.step_id.as_deref(), Some("q"));
     assert_eq!(
         error.message,
-        "Ask me steps can't run in this version of FolderFlow yet."
+        "Write steps can't run in this version of FolderFlow yet."
     );
     // The failure is announced; the Notify after it never ran.
     assert_eq!(
         h.notes.shown.lock().unwrap().clone(),
         [(
             "Asks".to_string(),
-            "Ask first failed on a.txt: Ask me steps can't run in this version of FolderFlow yet."
+            "Sum up first failed on a.txt: Write steps can't run in this version of FolderFlow yet."
                 .to_string()
         )]
     );

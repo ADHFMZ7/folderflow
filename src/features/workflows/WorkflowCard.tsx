@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { WorkflowSummary } from "../../api/types";
 import { hrefFor } from "../../app/routes";
 import { Badge, Button, Card } from "../../ui";
+import { ago, runName, STATUS_WORDS } from "../runs/format";
 import styles from "./workflows.module.css";
 
 export function WorkflowCard({ workflow: w, onDelete }: { workflow: WorkflowSummary; onDelete: (id: string) => Promise<void> }) {
@@ -29,7 +30,7 @@ export function WorkflowCard({ workflow: w, onDelete }: { workflow: WorkflowSumm
           <Badge tone={w.enabled ? "ok" : "neutral"}>{w.enabled ? "On" : "Off"}</Badge>
         </span>
         <span className={styles.muted}>{w.trigger}</span>
-        <span className={styles.small}>Last run: {w.lastRun ?? "Never"}</span>
+        <span className={styles.small}>Last run: {lastRun(w)}</span>
       </a>
       {confirming ? (
         <div className={styles.confirm}>
@@ -42,4 +43,11 @@ export function WorkflowCard({ workflow: w, onDelete }: { workflow: WorkflowSumm
       )}
     </Card>
   );
+}
+
+/** "Scan_0042.pdf · 2 min ago", with the state when it didn't simply finish. */
+function lastRun({ lastRun: run }: WorkflowSummary) {
+  if (!run) return "Never";
+  const state = run.status === "done" ? "" : ` · ${STATUS_WORDS[run.status]}`;
+  return `${runName(run)} · ${ago(run.startedAt)}${state}`;
 }

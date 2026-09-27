@@ -142,7 +142,7 @@ async fn a_failed_run_keeps_what_it_did_and_can_be_undone() {
         ])),
     );
     // Classify needs a model to pass validation.
-    set_models(&h);
+    h.set_models();
     let file = h.file("Downloads/a.pdf");
 
     let id = h.engine.run_now(&wf.id, vec![file]).unwrap()[0].id.clone();
@@ -251,29 +251,4 @@ async fn a_crash_mid_action_is_settled_at_the_next_start() {
     // The rename was found done, so undo can reverse it.
     h.engine.undo_run(&id).unwrap();
     assert_eq!(names(&h.home.join("Downloads")), ["a.pdf"]);
-}
-
-fn set_models(h: &EngineHarness) {
-    use folderflow_lib::storage::data_dir::DataDir;
-    use folderflow_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
-    let model = Some(ModelRef {
-        connection_id: "c1".into(),
-        model_id: "m".into(),
-    });
-    let settings = Settings {
-        connections: vec![Connection {
-            id: "c1".into(),
-            provider_id: "ollama".into(),
-            endpoint: None,
-        }],
-        defaults: [
-            ("llm".to_string(), model.clone()),
-            ("system1".to_string(), model),
-        ]
-        .into(),
-        ..Settings::default()
-    };
-    SettingsStore::new(&DataDir::open(&h.root).unwrap())
-        .save(&settings)
-        .unwrap();
 }

@@ -36,7 +36,8 @@ use crate::workflow::{validate, StepKind, Workflow};
 use files::{Files, Grants, Trash, Writes};
 use intake::{Intake, Watch};
 use runs::{
-    Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, TriggerKind, UndoResult,
+    NeedsYouItem, Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, StepOutcome,
+    TriggerKind, UndoResult,
 };
 use schedule::Schedules;
 
@@ -101,6 +102,9 @@ impl Clock for SystemClock {
 /// How many runs `list_runs` returns when not told.
 const DEFAULT_LIMIT: u32 = 100;
 
+/// How many runs of each workflow the history keeps (decision 7).
+pub const KEEP_RUNS: usize = 1000;
+
 /// The longest the schedule clock sleeps, so waking from sleep or a change
 /// of time zone is noticed within a minute.
 const SCHEDULE_NAP: Duration = Duration::from_secs(60);
@@ -124,6 +128,8 @@ struct Inner {
     recovered: Mutex<Vec<PathBuf>>,
     /// Turning workflows on and off, one at a time.
     reloading: Mutex<()>,
+    /// What the workflow list shows without reading every run.
+    index: Mutex<Index>,
     /// One queue per workflow, so its runs go one at a time, in order.
     queues: Mutex<HashMap<String, mpsc::UnboundedSender<String>>>,
 }
@@ -147,6 +153,7 @@ impl Engine {
             schedules: Mutex::new(Schedules::load(engine_dir.join("schedules.json"))),
             recovered: Mutex::new(recovered.touched),
             reloading: Mutex::new(()),
+            index: Mutex::new(Index::default()),
             queues: Mutex::new(HashMap::new()),
         };
         for mut run in inner.runs.all()? {
@@ -154,6 +161,7 @@ impl Engine {
                 run.status = RunStatus::Interrupted;
                 inner.runs.save(&run)?;
             }
+            lock(&inner.index).note(&run);
         }
         Ok(Self {
             inner: Arc::new(inner),
@@ -304,6 +312,147 @@ impl Engine {
         inner.runs.save(&run).map_err(history_error)?;
         inner.announce(&run);
         Ok(UndoResult { run, report })
+    }
+
+    /// Everything waiting on the person, newest first.
+    pub fn list_needs_you(&self) -> Result<Vec<NeedsYouItem>, ApiError> {
+        let ids: Vec<String> = lock(&self.inner.index).needs.keys().cloned().collect();
+        let mut items: Vec<NeedsYouItem> = ids
+            .iter()
+            .filter_map(|id| self.inner.runs.get(id).ok().flatten())
+            .filter_map(|run| run.needs_you())
+            .collect();
+        items.sort_by_cached_key(|i| std::cmp::Reverse(newness(&i.run)));
+        Ok(items)
+    }
+
+    /// For each workflow with runs: how many need the person, and its newest run.
+    pub fn workflow_runs(&self) -> HashMap<String, (u32, RunSummary)> {
+        let index = lock(&self.inner.index);
+        index
+            .last
+            .iter()
+            .map(|(wf, last)| {
+                let needs = index.needs.values().filter(|w| *w == wf).count() as u32;
+                (wf.clone(), (needs, last.clone()))
+            })
+            .collect()
+    }
+
+    /// Answers a waiting run's question; the run carries on down that branch.
+    pub fn answer(&self, run_id: &str, branch_id: &str) -> Result<Run, ApiError> {
+        let inner = &self.inner;
+        let mut run = self.get_run(run_id)?;
+        let question = match (&run.status, &run.waiting_for) {
+            (RunStatus::Waiting, Some(q)) => q.clone(),
+            _ => {
+                return Err(ApiError::new(
+                    ErrorCode::Conflict,
+                    "This question was already answered.",
+                ))
+            }
+        };
+        let Some(answer) = question.answers.iter().find(|a| a.id == branch_id) else {
+            return Err(invalid("That isn't one of the answers to this question."));
+        };
+        if let Some(entry) = run
+            .steps
+            .iter_mut()
+            .rev()
+            .find(|s| s.step_id == question.step_id && s.outcome == StepOutcome::Waiting)
+        {
+            entry.outcome = StepOutcome::Done;
+            entry.branch = Some(answer.id.clone());
+            entry.ended_at = Some(inner.ports.now());
+            entry.message = Some(format!("You answered {}.", answer.label));
+        }
+        run.waiting_for = None;
+        run.continue_at = runner::after(&run, &question.step_id, Some(branch_id));
+        if run.continue_at.is_some() {
+            run.status = RunStatus::Queued;
+        } else {
+            run.status = RunStatus::Done;
+            run.ended_at = Some(inner.ports.now());
+        }
+        inner.runs.save(&run).map_err(history_error)?;
+        inner.announce(&run);
+        if run.status == RunStatus::Queued {
+            Inner::enqueue(inner, &run.workflow_id, &run.id);
+        }
+        Ok(run)
+    }
+
+    /// Runs a failed run again from the step that failed, with the values it had.
+    pub fn retry_run(&self, run_id: &str) -> Result<Run, ApiError> {
+        let run = self.get_run(run_id)?;
+        if run.status != RunStatus::Failed {
+            return Err(ApiError::new(
+                ErrorCode::Conflict,
+                "Only a failed run can be retried.",
+            ));
+        }
+        let at = run.error.as_ref().and_then(|e| e.step_id.clone());
+        self.requeue(run, at)
+    }
+
+    /// Carries on an interrupted run from where it stopped. A step that was
+    /// cut off runs again.
+    pub fn resume_run(&self, run_id: &str) -> Result<Run, ApiError> {
+        let run = self.get_run(run_id)?;
+        if run.status != RunStatus::Interrupted {
+            return Err(ApiError::new(
+                ErrorCode::Conflict,
+                "Only a run FolderFlow stopped by quitting can be resumed.",
+            ));
+        }
+        let at = match run.steps.last() {
+            None => None,
+            Some(last) if last.outcome == StepOutcome::Done => {
+                match runner::after(&run, &last.step_id, last.branch.as_deref()) {
+                    Some(next) => Some(next),
+                    // It had finished its last step: nothing is left to do.
+                    None => return self.finish_done(run),
+                }
+            }
+            Some(last) => Some(last.step_id.clone()),
+        };
+        self.requeue(run, at)
+    }
+
+    /// Takes a failed or interrupted run out of Needs you, changing nothing else.
+    pub fn dismiss_run(&self, run_id: &str) -> Result<(), ApiError> {
+        let mut run = self.get_run(run_id)?;
+        if !matches!(run.status, RunStatus::Failed | RunStatus::Interrupted) {
+            return Err(ApiError::new(
+                ErrorCode::Conflict,
+                "Only a failed or stopped run can be dismissed.",
+            ));
+        }
+        run.dismissed = true;
+        self.inner.runs.save(&run).map_err(history_error)?;
+        self.inner.announce(&run);
+        Ok(())
+    }
+
+    fn requeue(&self, mut run: Run, at: Option<String>) -> Result<Run, ApiError> {
+        let inner = &self.inner;
+        run.continue_at = at;
+        run.error = None;
+        run.ended_at = None;
+        run.dismissed = false;
+        run.status = RunStatus::Queued;
+        inner.runs.save(&run).map_err(history_error)?;
+        inner.announce(&run);
+        Inner::enqueue(inner, &run.workflow_id, &run.id);
+        Ok(run)
+    }
+
+    fn finish_done(&self, mut run: Run) -> Result<Run, ApiError> {
+        run.status = RunStatus::Done;
+        run.ended_at = Some(self.inner.ports.now());
+        self.inner.runs.save(&run).map_err(history_error)?;
+        self.inner.announce(&run);
+        Ok(run)
     }
 
     pub fn get_run(&self, id: &str) -> Result<Run, ApiError> {
@@ -476,6 +625,9 @@ impl Inner {
             },
             file,
             undo: None,
+            waiting_for: None,
+            continue_at: None,
+            dismissed: false,
             status: RunStatus::Queued,
             started_at: self.ports.now(),
             ended_at: None,
@@ -489,6 +641,7 @@ impl Inner {
     }
 
     fn announce(&self, run: &Run) {
+        lock(&self.index).note(run);
         self.ports.events.run_changed(RunChanged {
             run_id: run.id.clone(),
             workflow_id: run.workflow_id.clone(),
@@ -540,17 +693,42 @@ impl Inner {
             }),
         };
 
-        run.ended_at = Some(self.ports.now());
-        run.status = match result {
-            Ok(()) => RunStatus::Done,
+        match result {
+            Ok(runner::Ended::Waiting) => {
+                run.status = RunStatus::Waiting;
+                if let Some(q) = &run.waiting_for {
+                    let _ = self.ports.notifier.notify(&run.workflow.name, &q.question);
+                }
+            }
+            Ok(runner::Ended::Done) => {
+                run.ended_at = Some(self.ports.now());
+                run.status = RunStatus::Done;
+            }
             Err(error) => {
+                run.ended_at = Some(self.ports.now());
                 self.tell_failed(&run, &error.step_id, &error.message);
                 run.error = Some(error);
-                RunStatus::Failed
+                run.status = RunStatus::Failed;
             }
-        };
+        }
         self.save(&run);
         self.announce(&run);
+        if run.status == RunStatus::Done {
+            self.prune(&run.workflow_id);
+        }
+    }
+
+    /// Keeps the history to the newest runs; see `KEEP_RUNS`.
+    fn prune(&self, workflow_id: &str) {
+        let result = self.runs.prune(workflow_id, KEEP_RUNS, |id| {
+            if let Err(e) = files::forget(&self.journal, id) {
+                eprintln!("folderflow: couldn't remove the journal of run {id}: {e}");
+            }
+            lock(&self.index).forget(id);
+        });
+        if let Err(e) = result {
+            eprintln!("folderflow: couldn't tidy the run history: {e}");
+        }
     }
 
     /// A save that fails mid-run can't stop the run; the next save retries.
@@ -596,6 +774,44 @@ async fn keep_time(engine: Weak<Inner>) {
         };
         inner.check_schedules();
     }
+}
+
+/// The runs that need the person, and each workflow's newest run.
+#[derive(Default)]
+struct Index {
+    /// Run id → workflow id.
+    needs: std::collections::BTreeMap<String, String>,
+    last: HashMap<String, RunSummary>,
+}
+
+impl Index {
+    fn note(&mut self, run: &Run) {
+        if run.needs_you().is_some() {
+            self.needs.insert(run.id.clone(), run.workflow_id.clone());
+        } else {
+            self.needs.remove(&run.id);
+        }
+        let summary = run.summary();
+        let newer = self
+            .last
+            .get(&run.workflow_id)
+            .is_none_or(|last| last.id == run.id || newness(last) < newness(&summary));
+        if newer {
+            self.last.insert(run.workflow_id.clone(), summary);
+        }
+    }
+
+    fn forget(&mut self, run_id: &str) {
+        self.needs.remove(run_id);
+    }
+}
+
+/// Orders runs by when they were queued, whatever the offset they were written with.
+fn newness(run: &RunSummary) -> (Option<DateTime<FixedOffset>>, String) {
+    (
+        DateTime::parse_from_rfc3339(&run.started_at).ok(),
+        run.id.clone(),
+    )
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {

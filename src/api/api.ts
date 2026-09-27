@@ -5,7 +5,7 @@
 import { createContext, useContext } from "react";
 import type {
   ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, Run, RunChanged,
-  RunQuery, RunSummary, SaveResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
+  NeedsYouItem, RunQuery, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
 } from "./types";
 
 /** Every method may reject with an ApiError. */
@@ -59,6 +59,18 @@ export interface Api {
   /** Newest first. */
   listRuns(query?: RunQuery): Promise<RunSummary[]>;
   getRun(id: string): Promise<Run>;
+  /** Questions, failed runs and interrupted runs, newest first. */
+  listNeedsYou(): Promise<NeedsYouItem[]>;
+  /** Answers a waiting run's question; the run carries on down that branch. "conflict" if it isn't waiting. */
+  answer(runId: string, branchId: string): Promise<Run>;
+  /** Runs a failed run again from the step that failed. */
+  retryRun(runId: string): Promise<Run>;
+  /** Carries on a run cut off by FolderFlow quitting; a step that was cut off runs again. */
+  resumeRun(runId: string): Promise<Run>;
+  /** Reverses the run's file changes, newest first; files changed since are left alone and listed. */
+  undoRun(runId: string): Promise<UndoResult>;
+  /** Takes a failed or interrupted run out of Needs you, changing nothing else. */
+  dismissRun(runId: string): Promise<void>;
   /** Calls `listener` on every run-changed event until the returned function is called. */
   onRunChanged(listener: (change: RunChanged) => void): () => void;
 }

@@ -2,6 +2,7 @@ import type { Template, WorkflowSummary } from "../../api/types";
 import { useSettings } from "../../settings/SettingsProvider";
 import { Banner, Button, Spinner } from "../../ui";
 import { missingKinds } from "../models/defaults";
+import { NeedsYou } from "../runs/NeedsYou";
 import { TemplateCard } from "./TemplateCard";
 import { WorkflowCard } from "./WorkflowCard";
 import styles from "./workflows.module.css";
@@ -21,6 +22,7 @@ export function WorkflowsPage({ workflows, templates, create, remove }: Props) {
         <Button onClick={() => create(null)}>+ New workflow</Button>
       </header>
       <MissingModelsBanner workflows={(workflows ?? []).filter((w) => w.status === "ok")} />
+      <NeedsYou />
       {workflows === null ? <Spinner label="Loading workflows…" />
         : workflows.length ? (
           <div className={styles.grid}>{workflows.map((w) => <WorkflowCard key={w.id} workflow={w} onDelete={remove} />)}</div>

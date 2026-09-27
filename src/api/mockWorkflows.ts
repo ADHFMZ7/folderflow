@@ -2,7 +2,7 @@
 // The Rust core is the authority on validation; this one only covers the basics
 // so previews and screen tests have something to show. See docs/workflow-format.md.
 
-import type { Field, ModelKindId, Problem, Step, Workflow, WorkflowSummary } from "./types";
+import type { Field, ModelKindId, Problem, Run, RunSummary, Step, Workflow, WorkflowSummary } from "./types";
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -136,7 +136,7 @@ function triggerText(wf: Workflow): string {
   return "No trigger";
 }
 
-export function summarize(wf: Workflow, run?: { needsYou: number; lastRun: string | null }): WorkflowSummary {
+export function summarize(wf: Workflow, run?: { needsYou: number; lastRun: RunSummary | null }): WorkflowSummary {
   const kinds = [...new Set(wf.steps.map((s) => KIND_OF[s.type]).filter((k): k is string => !!k))];
   return {
     id: wf.id, name: wf.name, trigger: triggerText(wf), enabled: wf.enabled,
@@ -185,13 +185,41 @@ export function roughValidate(wf: Workflow): Problem[] {
   return problems;
 }
 
-/** Sample workflows for previews: `folderflow.mock.workflows = "sample"`. */
-export function sampleWorkflows(): { workflow: Workflow; run: { needsYou: number; lastRun: string | null } }[] {
+/** Sample workflows for previews: `folderflow.mock.workflows = "sample"`, each with its past runs. */
+export function sampleWorkflows(): { workflow: Workflow; runs: Run[] }[] {
   const receipts = { ...templateWorkflow("invoices")!, name: "Receipts and invoices", enabled: true };
   const screenshots = { ...templateWorkflow("screenshots")!, enabled: true };
+  const failed = sampleRun(receipts, "~/Downloads/Scan_0042.pdf", 2);
+  failed.status = "failed";
+  const classify = receipts.steps.find((s) => s.type === "classify");
+  failed.steps.push({
+    stepId: classify?.id ?? "", title: classify?.title ?? "Classify", type: "classify", startedAt: failed.startedAt,
+    endedAt: failed.endedAt, outcome: "failed", branch: null, values: {}, message: "Couldn't reach Ollama. Is it running?",
+  });
+  failed.error = { stepId: classify?.id ?? null, message: "Couldn't reach Ollama. Is it running?" };
+  const done = sampleRun(screenshots, "~/Desktop/Screenshot 2026-09-14 at 10.02.11.png", 60);
+  const move = screenshots.steps.find((s) => s.type === "move");
+  done.steps.push({
+    stepId: move?.id ?? "", title: move?.title ?? "Move", type: "move", startedAt: done.startedAt, endedAt: done.endedAt,
+    outcome: "done", branch: null, values: {}, message: "Moved Screenshot 2026-09-14 at 10.02.11.png to ~/Pictures/Screenshots/2026.",
+  });
   return [
-    { workflow: receipts, run: { needsYou: 1, lastRun: "Scan_0042.pdf · 2 min ago" } },
-    { workflow: screenshots, run: { needsYou: 0, lastRun: "Screenshot 10.02 · 1 h ago" } },
-    { workflow: templateWorkflow("cleanup")!, run: { needsYou: 0, lastRun: null } },
+    { workflow: receipts, runs: [failed] },
+    { workflow: screenshots, runs: [done] },
+    { workflow: templateWorkflow("cleanup")!, runs: [] },
   ];
+}
+
+/** A finished run of `workflow` on `file`, `minutesAgo`, with its trigger step. */
+function sampleRun(workflow: Workflow, file: string, minutesAgo: number): Run {
+  const at = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const trigger = workflow.steps.find((s) => TRIGGERS.includes(s.type));
+  return {
+    id: crypto.randomUUID(), workflowId: workflow.id, revision: workflow.revision, workflow: structuredClone(workflow),
+    trigger: { kind: "fileAdded", file: { path: file, inode: 1 } }, file: { path: file, inode: 1 }, status: "done",
+    startedAt: at, endedAt: at,
+    steps: [{ stepId: trigger?.id ?? "", title: trigger?.title ?? "", type: trigger?.type ?? "fileAdded", startedAt: at, endedAt: at,
+      outcome: "done", branch: null, values: {}, message: null }],
+    values: {}, error: null, undo: null, waitingFor: null, continueAt: null, dismissed: false,
+  };
 }
