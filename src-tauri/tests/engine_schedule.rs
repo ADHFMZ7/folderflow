@@ -92,3 +92,19 @@ async fn turning_it_off_stops_it() {
     h.engine.check_schedules();
     assert!(h.settle().await.is_empty());
 }
+
+#[tokio::test]
+async fn a_time_that_passes_while_paused_is_skipped_not_run_later() {
+    let mut h = engine();
+    h.clock.set(at(8, 0));
+    morning(&h);
+    h.engine.pause_all(true).unwrap();
+
+    h.clock.set(at(9, 0));
+    h.engine.check_schedules();
+    h.clock.set(at(9, 30));
+    h.engine.pause_all(false).unwrap();
+    h.engine.check_schedules();
+
+    assert!(h.settle().await.is_empty());
+}

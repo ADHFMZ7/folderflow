@@ -285,6 +285,31 @@ The History page lists runs newest first, 50 at a time, filtered by workflow or 
 
 Later: the editor opens a workflow's recent runs and highlights the path a run took on the canvas; clicking a notification opens its run.
 
+### Notifications
+
+Everything FolderFlow tells the person goes two ways: a macOS notification, and the list under the bell at the top right of the window (`engine/notices.rs`, kept in `engine/notifications.json`, the newest 200). The list is there even when macOS doesn't show a notification, as in development builds or with notifications turned off.
+
+| Kind | When | Says |
+|---|---|---|
+| `question` | A run reaches Ask me | The question |
+| `failed` | A run fails | "Rename it failed on README: …" |
+| `message` | A Notify step | Its message |
+| `undo` | Undo run left files alone | "Undo put back 2 of this run's changes. 1 file changed since, so it was left alone." |
+
+The bell shows the unread count. Its panel lists them newest first; clicking one opens its run and marks it read, "Mark all as read" clears the count, and "Clear all" empties the list (runs stay in History). The `notices-changed` event (`onNoticesChanged`) carries the unread count whenever the list changes.
+
+### Pause all
+
+The title bar shows runs in progress: a spinner and "2 running". Hovered, it turns into a pause icon and "Pause all"; with nothing running, only the pause icon shows. Clicking pauses every workflow:
+
+- New files wait. They aren't recorded as seen, so resuming looks in every watched folder at once and runs them.
+- Scheduled times that pass while paused are skipped, not run later.
+- Runs already queued or running finish, and Run now still works: the person asked for it.
+
+Paused, the title bar shows an amber "Paused · Resume", and the Workflows page a banner saying what pausing does. The pause is kept in `engine/paused`, so it survives a restart. This is the Pause all the menu bar gets in pull request 9.
+
+Next to the bell, a sun or moon switches between light and dark: the same setting as Settings › Appearance, starting from what the Mac shows when that is set to System.
+
 ### Storage and retention
 
 Runs live in `runs/<workflow id>/<run id>.json`, with their journals, in the app's data folder. After each run that ends done, a workflow's runs beyond the newest 1,000 are removed along with their journals and backups (`RunStore::prune`, `files::forget`); only then are they read, so a workflow under the limit costs a directory count. Runs that are queued, running, waiting, failed or interrupted are never removed. Later: deleting a workflow moves its runs to the trash with it.
@@ -317,11 +342,15 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 | `chooseFiles(start?)` | `choose_files` | `string[]`, with `~` for the home folder (empty when cancelled) |
 | `runNow(workflowId, files)` | `run_now` | `RunSummary[]`, queued |
 | `tryOnFile(workflow, file)` | `try_on_file` | `TryResult`; progress arrives as `try-step` events |
-| `pauseAll(paused)` | `pause_all` | nothing |
+| `pauseAll(paused)` | `pause_all` | `Activity`: `{ paused, running }` |
+| `getActivity()` | `get_activity` | `Activity` |
+| `listNotices()` | `list_notices` | `Notice[]`, newest first |
+| `markNoticesRead(ids?)` | `mark_notices_read` | nothing; all of them when `ids` is left out |
+| `clearNotices()` | `clear_notices` | nothing; runs and their history are untouched |
 
 Turning a workflow on stays a save with `enabled: true`; the engine hears of it from the command. Later, with the screen that offers to run on them, the result gains `alreadyThere: number`, the files recorded as seen without running.
 
-**Events:** `run-changed` `{ runId, workflowId, status }`. Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
+**Events:** `run-changed` `{ runId, workflowId, status }`, and `notices-changed` with the unread count. Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
 
 **Errors:** runs use the existing codes. `not_found` is an unknown run, `conflict` is answering a run that isn't waiting (answered in another window, or undone), and `invalid` is an answer that isn't one of the step's branches.
 

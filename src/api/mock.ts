@@ -3,7 +3,7 @@
 
 import type { Api } from "./api";
 import {
-  ApiError, type Connection, type Model, type ModelKind, type ModelRef, type Provider, type Run, type RunChanged,
+  ApiError, type Activity, type Connection, type Model, type ModelKind, type ModelRef, type Notice, type NoticeKind, type Provider, type Run, type RunChanged,
   type Settings, type SettingsNotice, type Template, type Workflow,
 } from "./types";
 import { after, execute, needsYouOf, summaryOf } from "./mockRuns";
@@ -153,6 +153,25 @@ export function createMockApi(options: MockOptions = {}): Api {
   const announce = (run: Run) => {
     for (const listener of [...listeners]) listener({ runId: run.id, workflowId: run.workflowId, status: run.status });
   };
+
+  // The bell's list, newest first, and Pause all. There are no folders here,
+  // so pausing only changes what the title bar shows.
+  const notices: Notice[] = [];
+  const noticeListeners = new Set<(unread: number) => void>();
+  const noticesChanged = () => {
+    const unread = notices.filter((n) => !n.read).length;
+    for (const listener of [...noticeListeners]) listener(unread);
+  };
+  const tell = (kind: NoticeKind, run: Run, message: string) => {
+    notices.unshift({
+      id: crypto.randomUUID(), kind, workflowId: run.workflowId, workflowName: run.workflow.name, runId: run.id,
+      message, at: new Date().toISOString(), read: false,
+    });
+    notices.splice(200);
+    noticesChanged();
+  };
+  let paused = false;
+  const activity = (): Activity => ({ paused, running: runRecords.filter((r) => r.status === "queued" || r.status === "running").length });
   // Like the core, a workflow's runs go one at a time, in order.
   let queue = Promise.resolve();
   const later = () => new Promise((r) => setTimeout(r, delayMs));
@@ -162,7 +181,7 @@ export function createMockApi(options: MockOptions = {}): Api {
       if (run.status !== "queued") return;
       run.status = "running";
       announce(run);
-      execute(run, run.workflow, () => {});
+      execute(run, run.workflow, (kind, message) => tell(kind, run, message));
       announce(run);
     });
   };
@@ -402,6 +421,25 @@ export function createMockApi(options: MockOptions = {}): Api {
     onRunChanged(listener) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
+    },
+
+    async listNotices() { return structuredClone(notices); },
+    async markNoticesRead(ids) {
+      for (const n of notices) if (!ids || ids.includes(n.id)) n.read = true;
+      noticesChanged();
+    },
+    async clearNotices() {
+      notices.splice(0);
+      noticesChanged();
+    },
+    onNoticesChanged(listener) {
+      noticeListeners.add(listener);
+      return () => void noticeListeners.delete(listener);
+    },
+    async getActivity() { return activity(); },
+    async pauseAll(pause) {
+      paused = pause;
+      return activity();
     },
 
     async getWorkflow(id) { return stored(id); },
