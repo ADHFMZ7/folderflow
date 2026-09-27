@@ -322,7 +322,7 @@ Next to the bell, a sun or moon switches between light and dark: the same settin
 FolderFlow keeps running with its window closed (decision 3). This lives in `src-tauri/src/background.rs`, outside the engine.
 
 - **Closing the window** (the red button or ⌘W) hides it and takes FolderFlow out of the Dock and ⌘-Tab. Workflows keep running.
-- **The menu bar icon** is a folder with an arrow, or with a pause sign while paused, drawn as a template so it follows a light or dark menu bar. Its menu:
+- **The menu bar icon** is the sailing boat: with a wake while runs are going, its sails lowered while paused, and a dot when something needs you (paused shows over running). Drawn as templates, so it follows a light or dark menu bar; the sources and `render.sh` are in `src-tauri/icons/tray/`. Its menu:
 
   | Line | Does |
   |---|---|
