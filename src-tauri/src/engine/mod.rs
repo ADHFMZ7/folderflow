@@ -163,7 +163,7 @@ struct Inner {
     intake: Arc<Intake>,
     schedules: Mutex<Schedules>,
     /// Where file actions a crash cut off put files, until `start` records
-    /// them as FolderFlow's.
+    /// them as Vela's.
     recovered: Mutex<Vec<PathBuf>>,
     /// Turning workflows on and off, one at a time.
     reloading: Mutex<()>,
@@ -230,7 +230,7 @@ impl Engine {
         let ids = match inner.workflows.list() {
             Ok(listed) => listed.into_iter().map(|l| l.id).collect(),
             Err(e) => {
-                eprintln!("folderflow: couldn't list the workflows: {e}");
+                eprintln!("vela: couldn't list the workflows: {e}");
                 Vec::new()
             }
         };
@@ -241,7 +241,7 @@ impl Engine {
                 carrying_on.push(id.clone());
             }
         }
-        // Files a crash cut off mid-write are FolderFlow's, not new.
+        // Files a crash cut off mid-write are Vela's, not new.
         for path in std::mem::take(&mut *lock(&inner.recovered)) {
             inner.intake.ours(&path);
         }
@@ -650,7 +650,7 @@ impl Engine {
         if run.status != RunStatus::Interrupted {
             return Err(ApiError::new(
                 ErrorCode::Conflict,
-                "Only a run FolderFlow stopped by quitting can be resumed.",
+                "Only a run Vela stopped by quitting can be resumed.",
             ));
         }
         let at = match run.steps.last() {
@@ -804,7 +804,7 @@ impl Inner {
 
     fn report(&self, id: &str, result: io::Result<()>) {
         if let Err(e) = result {
-            eprintln!("folderflow: couldn't update the records of workflow {id}: {e}");
+            eprintln!("vela: couldn't update the records of workflow {id}: {e}");
         }
     }
 
@@ -817,7 +817,7 @@ impl Inner {
         let files = match this.intake.take(id) {
             Ok(files) => files,
             Err(e) => {
-                eprintln!("folderflow: couldn't look for new files for workflow {id}: {e}");
+                eprintln!("vela: couldn't look for new files for workflow {id}: {e}");
                 return;
             }
         };
@@ -830,7 +830,7 @@ impl Inner {
         for file in files {
             match this.queued(&workflow, TriggerKind::FileAdded, Some(file)) {
                 Ok(run) => Inner::enqueue(this, id, &run.id),
-                Err(e) => eprintln!("folderflow: couldn't queue a run: {e}"),
+                Err(e) => eprintln!("vela: couldn't queue a run: {e}"),
             }
         }
     }
@@ -865,7 +865,7 @@ impl Inner {
         let due = match lock(&self.schedules).due(&now) {
             Ok(due) => due,
             Err(e) => {
-                eprintln!("folderflow: couldn't update the schedules: {e}");
+                eprintln!("vela: couldn't update the schedules: {e}");
                 return;
             }
         };
@@ -882,7 +882,7 @@ impl Inner {
             }
             match self.queued(&workflow, TriggerKind::Schedule, None) {
                 Ok(run) => Inner::enqueue(self, &id, &run.id),
-                Err(e) => eprintln!("folderflow: couldn't queue a run: {e}"),
+                Err(e) => eprintln!("vela: couldn't queue a run: {e}"),
             }
         }
     }
@@ -1022,19 +1022,19 @@ impl Inner {
     fn prune(&self, workflow_id: &str) {
         let result = self.runs.prune(workflow_id, KEEP_RUNS, |id| {
             if let Err(e) = files::forget(&self.journal, id) {
-                eprintln!("folderflow: couldn't remove the journal of run {id}: {e}");
+                eprintln!("vela: couldn't remove the journal of run {id}: {e}");
             }
             lock(&self.index).forget(id);
         });
         if let Err(e) = result {
-            eprintln!("folderflow: couldn't tidy the run history: {e}");
+            eprintln!("vela: couldn't tidy the run history: {e}");
         }
     }
 
     /// A save that fails mid-run can't stop the run; the next save retries.
     fn save(&self, run: &Run) {
         if let Err(e) = self.runs.save(run) {
-            eprintln!("folderflow: couldn't save run {}: {e}", run.id);
+            eprintln!("vela: couldn't save run {}: {e}", run.id);
         }
     }
 
@@ -1168,9 +1168,7 @@ fn chosen_file(chosen: &str, home: &Path) -> Result<RunFile, ApiError> {
         )));
     }
     if !meta.is_file() {
-        return Err(invalid(format!(
-            "{name} isn't a file FolderFlow can run on."
-        )));
+        return Err(invalid(format!("{name} isn't a file Vela can run on.")));
     }
     Ok(RunFile {
         path,

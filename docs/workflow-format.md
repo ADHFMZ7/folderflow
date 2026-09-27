@@ -126,7 +126,7 @@ Validation returns a list of problems. A workflow with problems can be saved but
 
 - `trigger` is a short description such as `"File added · ~/Downloads"`, `"Schedule · Weekdays 09:00"` or `"Run now"`.
 - `kindsNeeded` lists the model kinds its AI steps use.
-- `status` is `"ok"`, `"damaged"` (the file can't be read; it's kept as is) or `"tooNew"` (written by a newer FolderFlow). For those two, `name` is the file name and the other fields are empty.
+- `status` is `"ok"`, `"damaged"` (the file can't be read; it's kept as is) or `"tooNew"` (written by a newer Vela). For those two, `name` is the file name and the other fields are empty.
 - `lastRun` is `null` and `needsYou` is `0` until workflows run.
 
 Rules:

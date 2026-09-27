@@ -201,7 +201,7 @@ impl<P: ProviderClient> Backend<P> {
         let provider = catalog::provider_by_id(&connection.provider_id).ok_or_else(|| {
             ApiError::new(
                 ErrorCode::Invalid,
-                "This connection's provider isn't supported by this version of FolderFlow.",
+                "This connection's provider isn't supported by this version of Vela.",
             )
         })?;
         let key = self.secrets.get(&connection.id)?;
@@ -254,10 +254,7 @@ impl<P: ProviderClient> Backend<P> {
         let workflow = match template_id.as_deref() {
             None => templates::blank(),
             Some(id) => templates::build(id).ok_or_else(|| {
-                ApiError::new(
-                    ErrorCode::NotFound,
-                    "FolderFlow doesn't know that template.",
-                )
+                ApiError::new(ErrorCode::NotFound, "Vela doesn't know that template.")
             })?,
         };
         Ok(self.workflows.create(workflow)?)
@@ -329,12 +326,8 @@ impl<P: ProviderClient> Backend<P> {
 }
 
 fn find_provider(id: &str) -> Result<Provider, ApiError> {
-    catalog::provider_by_id(id).ok_or_else(|| {
-        ApiError::new(
-            ErrorCode::NotFound,
-            "FolderFlow doesn't know that provider.",
-        )
-    })
+    catalog::provider_by_id(id)
+        .ok_or_else(|| ApiError::new(ErrorCode::NotFound, "Vela doesn't know that provider."))
 }
 
 /// Which provider API to ask, with only this provider's key. `None` when the
@@ -417,7 +410,7 @@ fn unexpected_answer(provider: &Provider) -> ApiError {
     ApiError::new(
         ErrorCode::Provider,
         format!(
-            "{} sent an answer FolderFlow couldn't read. Try again later.",
+            "{} sent an answer Vela couldn't read. Try again later.",
             provider.name
         ),
     )

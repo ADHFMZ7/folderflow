@@ -11,7 +11,7 @@ pub enum PathProblem {
     NotFull,
     /// A `..` component.
     GoesUp,
-    /// The folder it names is one FolderFlow never works in.
+    /// The folder it names is one Vela never works in.
     NotAllowed(String),
 }
 
@@ -21,7 +21,7 @@ impl PathProblem {
             PathProblem::NotFull => "Write the full path, starting with ~/ or /.".into(),
             PathProblem::GoesUp => "A path can't use .. to go up a folder.".into(),
             PathProblem::NotAllowed(folder) => format!(
-                "FolderFlow doesn't work in {folder}. Choose a folder inside your home folder, like ~/Documents."
+                "Vela doesn't work in {folder}. Choose a folder inside your home folder, like ~/Documents."
             ),
         }
     }

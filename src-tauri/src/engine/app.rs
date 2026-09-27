@@ -38,9 +38,9 @@ impl Trash for AppTrash {
     }
 }
 
-/// Notifications from FolderFlow. They show as banners even while FolderFlow
+/// Notifications from Vela. They show as banners even while Vela
 /// is the front app, which macOS otherwise skips: a person who just chose Run
-/// is usually looking at FolderFlow.
+/// is usually looking at Vela.
 pub struct AppNotifier {
     /// Why notifications can't be shown at all, if they can't.
     unavailable: Option<String>,
@@ -48,14 +48,13 @@ pub struct AppNotifier {
 
 impl AppNotifier {
     /// Sends as the app with this bundle id. A development build isn't a bundle,
-    /// so it borrows the id, which macOS knows only once FolderFlow.app has
+    /// so it borrows the id, which macOS knows only once Vela.app has
     /// been opened; until then every notification fails, and says why.
     pub fn new(identifier: &str) -> Self {
         let unavailable = mac_notification_sys::set_application(identifier)
             .err()
             .map(|_| {
-                "macOS doesn't know FolderFlow yet. Open FolderFlow.app once, then try again."
-                    .to_string()
+                "macOS doesn't know Vela yet. Open Vela.app once, then try again.".to_string()
             });
         if unavailable.is_none() {
             let presenter = Presenter::new();
@@ -86,9 +85,9 @@ impl Notifier for AppNotifier {
 }
 
 define_class!(
-    /// Tells macOS to show every FolderFlow notification, front app or not.
+    /// Tells macOS to show every Vela notification, front app or not.
     #[unsafe(super(NSObject))]
-    #[name = "FolderFlowNotificationPresenter"]
+    #[name = "VelaNotificationPresenter"]
     struct Presenter;
 
     unsafe impl NSObjectProtocol for Presenter {}
@@ -144,7 +143,7 @@ impl AppWatcher {
                         let _ = changes.send(path);
                     }
                 }
-                Err(e) => eprintln!("folderflow: folder watching: {e}"),
+                Err(e) => eprintln!("vela: folder watching: {e}"),
             })?;
         Ok(Self {
             watching: Mutex::new((watcher, Vec::new())),
@@ -166,7 +165,7 @@ impl Watcher for AppWatcher {
                 RecursiveMode::NonRecursive
             };
             if let Err(e) = watcher.watch(&new.0, mode) {
-                eprintln!("folderflow: couldn't watch {}: {e}", new.0.display());
+                eprintln!("vela: couldn't watch {}: {e}", new.0.display());
             }
         }
         *watching = folders.to_vec();

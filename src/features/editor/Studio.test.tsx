@@ -372,7 +372,7 @@ describe("run now", () => {
 
     run();
 
-    expect(await screen.findByText("Ran on 2 files, 2 failed: Write steps can't run in this version of FolderFlow yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Ran on 2 files, 2 failed: Write steps can't run in this version of Vela yet.")).toBeInTheDocument();
   });
 
   it("says when the run is waiting for an answer", async () => {

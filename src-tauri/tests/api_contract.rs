@@ -5,13 +5,13 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use folderflow_lib::api::catalog;
-use folderflow_lib::api::types::{
+use serde_json::{json, Value};
+use vela_lib::api::catalog;
+use vela_lib::api::types::{
     ApiError, ConnectOutcome, Credentials, DetectResult, ErrorCode, LoadedSettings, Model,
     SettingsChange, SettingsNotice, WorkflowStatus, WorkflowSummary,
 };
-use folderflow_lib::storage::settings::{Appearance, Connection, ModelRef, Settings};
-use serde_json::{json, Value};
+use vela_lib::storage::settings::{Appearance, Connection, ModelRef, Settings};
 
 fn to_json<T: serde::Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap()

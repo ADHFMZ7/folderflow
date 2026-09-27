@@ -12,14 +12,14 @@ describe("loading settings", () => {
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Welcome to FolderFlow" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome to Vela" })).toBeInTheDocument();
   });
 
   it("stops at a blocking screen when settings are from a newer version", async () => {
     renderApp({ storedFile: "tooNew" });
 
-    expect(await screen.findByRole("heading", { name: "These settings need a newer FolderFlow" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Welcome to FolderFlow" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "These settings need a newer Vela" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Welcome to Vela" })).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Main" })).not.toBeInTheDocument();
   });
 });

@@ -4,11 +4,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use folderflow_lib::api::providers::{HttpProviders, ProviderUrls};
-use folderflow_lib::api::types::Credentials;
-use folderflow_lib::api::Backend;
-use folderflow_lib::storage::secrets::MemorySecretStore;
 use serde_json::json;
+use vela_lib::api::providers::{HttpProviders, ProviderUrls};
+use vela_lib::api::types::Credentials;
+use vela_lib::api::Backend;
+use vela_lib::storage::secrets::MemorySecretStore;
 use wiremock::matchers::{any, header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 

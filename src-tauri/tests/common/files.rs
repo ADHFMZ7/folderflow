@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use folderflow_lib::engine::files::{sys, Files, Grant, Grants, Trash};
+use vela_lib::engine::files::{sys, Files, Grant, Grants, Trash};
 
 /// Moves "trashed" files into a folder, so tests never touch the real Trash.
 pub struct FolderTrash(pub PathBuf);

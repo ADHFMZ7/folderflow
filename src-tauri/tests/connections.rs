@@ -7,9 +7,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::Ordering;
 
-use folderflow_lib::storage::connections::{ConnectionError, Connections};
-use folderflow_lib::storage::secrets::{MemorySecretStore, Secret, SecretStore};
-use folderflow_lib::storage::settings::{ModelRef, Settings, SettingsStore};
+use vela_lib::storage::connections::{ConnectionError, Connections};
+use vela_lib::storage::secrets::{MemorySecretStore, Secret, SecretStore};
+use vela_lib::storage::settings::{ModelRef, Settings, SettingsStore};
 
 use common::FlakySecrets;
 

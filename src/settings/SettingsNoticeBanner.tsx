@@ -9,7 +9,7 @@ export function SettingsNoticeBanner() {
   return (
     <div className={styles.banner} role="alert">
       <p>
-        <strong>Your settings file was damaged</strong>, so FolderFlow started with fresh settings. The old file was kept at{" "}
+        <strong>Your settings file was damaged</strong>, so Vela started with fresh settings. The old file was kept at{" "}
         <code className={styles.path}>{notice.backup}</code>.
       </p>
       <button type="button" className={styles.dismiss} onClick={dismissNotice}>Dismiss</button>

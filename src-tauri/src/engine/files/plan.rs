@@ -62,7 +62,7 @@ impl Plan {
         match fs::symlink_metadata(&path) {
             Ok(meta) if meta.is_file() => Ok((folder, name, Some(path))),
             Ok(meta) if meta.file_type().is_symlink() => Err(FileError(format!(
-                "{name} is a link, so FolderFlow won't change it."
+                "{name} is a link, so Vela won't change it."
             ))),
             Ok(_) => Err(FileError(format!("{name} isn't a file."))),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -190,7 +190,7 @@ impl Actions for Plan {
             match fs::symlink_metadata(&path) {
                 Ok(meta) if meta.file_type().is_symlink() => {
                     return Err(FileError(format!(
-                        "{name} is a link, so FolderFlow won't change it."
+                        "{name} is a link, so Vela won't change it."
                     )))
                 }
                 Ok(meta) if !meta.is_file() => {

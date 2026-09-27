@@ -94,7 +94,7 @@ export function needsYouOf(run: Run): NeedsYouItem | null {
   }
   if (run.status === "interrupted") {
     const at = run.steps[run.steps.length - 1]?.title ?? null;
-    const message = at ? `Stopped at ${at} when FolderFlow quit.` : "FolderFlow quit before this run started.";
+    const message = at ? `Stopped at ${at} when Vela quit.` : "Vela quit before this run started.";
     return { kind: "interrupted", run: summaryOf(run), step: at, message, answers: [] };
   }
   return null;
@@ -198,7 +198,7 @@ export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, m
         current = step.next;
         break;
       default:
-        throw new Error(`${NAMES[step.type]} steps can't run in this version of FolderFlow yet.`);
+        throw new Error(`${NAMES[step.type]} steps can't run in this version of Vela yet.`);
     }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

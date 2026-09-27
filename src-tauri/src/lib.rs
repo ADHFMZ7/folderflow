@@ -17,6 +17,9 @@ use engine::{Engine, Ports, SystemClock};
 use storage::data_dir::DataDir;
 use storage::secrets::KeychainStore;
 
+/// The bundle id from before the app was named Vela.
+const OLD_ID: &str = "com.adhfmz7.folderflow"; // rename:keep
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -27,8 +30,11 @@ pub fn run() {
             Some(vec![background::AT_LOGIN]),
         ))
         .setup(|app| {
-            let dir = DataDir::open(app.path().app_data_dir()?)?;
-            // Keys go in the Keychain under the bundle id, com.adhfmz7.folderflow.
+            let data = app.path().app_data_dir()?;
+            // The old bundle id's data folder moves over once.
+            let old = data.with_file_name(OLD_ID);
+            let dir = DataDir::open_moving(data, &old)?;
+            // Keys go in the Keychain under the bundle id, com.adhfmz7.vela.
             let secrets = Arc::new(KeychainStore::new(app.config().identifier.clone()));
             let (changes, changed) = tokio::sync::mpsc::unbounded_channel();
             let engine = Engine::new(
@@ -55,9 +61,9 @@ pub fn run() {
                 Ok(loaded) => {
                     background::open_at_login(app.handle(), loaded.settings.open_at_login)
                 }
-                Err(e) => eprintln!("folderflow: {}", e.message),
+                Err(e) => eprintln!("vela: {}", e.message),
             }
-            // Opened at login, FolderFlow starts in the menu bar alone.
+            // Opened at login, Vela starts in the menu bar alone.
             if background::opened_at_login() {
                 app.set_dock_visibility(false);
             } else {

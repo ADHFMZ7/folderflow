@@ -97,7 +97,7 @@ describe("tauri api", () => {
 
   it("turns a command error into an ApiError with its code", async () => {
     mockIPC(() => {
-      throw { code: "too_new", message: "the settings file is from a newer version of FolderFlow (format 2)" };
+      throw { code: "too_new", message: "the settings file is from a newer version of Vela (format 2)" };
     });
 
     const err = await createTauriApi().getSettings().catch((e) => e);

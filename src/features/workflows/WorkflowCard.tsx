@@ -14,8 +14,8 @@ export function WorkflowCard({ workflow: w, onDelete }: { workflow: WorkflowSumm
         <h3 className={styles.fileName}>{w.name}</h3>
         <p className={styles.muted}>
           {w.status === "damaged"
-            ? "This workflow file can't be read. FolderFlow left it untouched."
-            : "This workflow was saved by a newer FolderFlow. Open the newer version to change it."}
+            ? "This workflow file can't be read. Vela left it untouched."
+            : "This workflow was saved by a newer Vela. Open the newer version to change it."}
         </p>
       </Card>
     );

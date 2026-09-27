@@ -2,10 +2,10 @@
 
 mod common;
 
-use folderflow_lib::api::types::{ConnectOutcome, DetectResult, ErrorCode, Model};
-use folderflow_lib::storage::secrets::SecretStore;
-use folderflow_lib::storage::settings::{Connection, ModelRef, Settings};
 use serde_json::json;
+use vela_lib::api::types::{ConnectOutcome, DetectResult, ErrorCode, Model};
+use vela_lib::storage::secrets::SecretStore;
+use vela_lib::storage::settings::{Connection, ModelRef, Settings};
 
 use common::api::{
     creds, harness, key, mount_anthropic, mount_ollama, mount_open_models, mount_openai_style,
@@ -491,7 +491,7 @@ async fn detect_only_applies_to_detectable_providers() {
 
 #[test]
 fn the_default_ollama_address_is_on_this_mac() {
-    let urls = folderflow_lib::api::providers::ProviderUrls::default();
+    let urls = vela_lib::api::providers::ProviderUrls::default();
 
     assert_eq!(urls.ollama, "http://localhost:11434");
     assert_eq!(urls.anthropic, "https://api.anthropic.com");

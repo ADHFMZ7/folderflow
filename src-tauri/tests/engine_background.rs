@@ -7,9 +7,9 @@ mod common;
 use std::fs;
 use std::time::Duration;
 
-use folderflow_lib::engine::runs::{NeedsYouKind, RunStatus, StepOutcome};
-use folderflow_lib::engine::Activity;
 use serde_json::{json, Value};
+use vela_lib::engine::runs::{NeedsYouKind, RunStatus, StepOutcome};
+use vela_lib::engine::Activity;
 
 use common::engine::{engine, EngineHarness};
 

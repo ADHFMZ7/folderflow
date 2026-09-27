@@ -9,10 +9,10 @@ export function SettingsProblem({ error }: { error: ApiError }) {
     <main className={styles.screen}>
       <div className="window-drag-strip" data-tauri-drag-region />
       <section className={styles.card} aria-labelledby="problem-title">
-        <h1 id="problem-title">{tooNew ? "These settings need a newer FolderFlow" : "FolderFlow couldn't open its settings"}</h1>
+        <h1 id="problem-title">{tooNew ? "These settings need a newer Vela" : "Vela couldn't open its settings"}</h1>
         <p className={styles.body}>
           {tooNew
-            ? "Your settings were saved by a newer version of FolderFlow. To keep them safe, this version won't read or change them. Open the newer version to carry on."
+            ? "Your settings were saved by a newer version of Vela. To keep them safe, this version won't read or change them. Open the newer version to carry on."
             : "Something went wrong while reading your settings. Nothing was changed."}
         </p>
         <p className={styles.detail}>{error.message}</p>

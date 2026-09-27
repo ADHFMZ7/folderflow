@@ -7,13 +7,11 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::sync::Barrier;
 
-use folderflow_lib::api::catalog;
-use folderflow_lib::api::types::{ErrorCode, SettingsChange, SettingsNotice};
-use folderflow_lib::storage::connections::Connections;
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::settings::{
-    Appearance, Connection, ModelRef, Settings, SettingsStore,
-};
+use vela_lib::api::catalog;
+use vela_lib::api::types::{ErrorCode, SettingsChange, SettingsNotice};
+use vela_lib::storage::connections::Connections;
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::settings::{Appearance, Connection, ModelRef, Settings, SettingsStore};
 
 use common::api::{offline_harness, Harness};
 

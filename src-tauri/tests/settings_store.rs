@@ -5,7 +5,7 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 
-use folderflow_lib::storage::settings::{
+use vela_lib::storage::settings::{
     Appearance, Connection, LoadOutcome, ModelRef, Settings, SettingsError, SettingsStore,
     SETTINGS_VERSION,
 };

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-FolderFlow (working name) is a macOS app, built with Tauri, for file workflows built as a node graph. The UI is React in `src/`, and the core is Rust in `src-tauri/`.
+Vela is a macOS app, built with Tauri, for file workflows built as a node graph. The UI is React in `src/`, and the core is Rust in `src-tauri/`.
 
 ## Testing
 

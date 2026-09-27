@@ -90,7 +90,7 @@ impl SecretStore for KeychainStore {
 /// so their own text is never passed on.
 fn keychain_error(e: &keyring::Error) -> SecretError {
     let reason = match e {
-        keyring::Error::NoStorageAccess(_) => "FolderFlow isn't allowed to use the Keychain",
+        keyring::Error::NoStorageAccess(_) => "Vela isn't allowed to use the Keychain",
         keyring::Error::NoEntry => "no key is stored",
         keyring::Error::BadEncoding(_) => "a stored key isn't valid text",
         keyring::Error::TooLong(..) => "the key is too long for the Keychain",

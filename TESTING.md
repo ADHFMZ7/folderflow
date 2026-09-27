@@ -1,6 +1,6 @@
 # Testing
 
-FolderFlow runs unattended on people's own files, holds their API keys, and puts nondeterministic models in the loop. Tests exist to make the bad outcomes impossible, not to reach a coverage number. We work test-first, and we spend the most effort where a bug would cost the most.
+Vela runs unattended on people's own files, holds their API keys, and puts nondeterministic models in the loop. Tests exist to make the bad outcomes impossible, not to reach a coverage number. We work test-first, and we spend the most effort where a bug would cost the most.
 
 ## Test-driven development
 
@@ -16,7 +16,7 @@ The test and the code it covers ship in the same pull request, and CI must be gr
 
 ## Critical risks
 
-These are the outcomes FolderFlow must never cause. Code in these areas is written test-first without exception, and its tests cover the attacks and accidents, not only the happy path.
+These are the outcomes Vela must never cause. Code in these areas is written test-first without exception, and its tests cover the attacks and accidents, not only the happy path.
 
 | Risk | Must hold | Tests to write |
 | --- | --- | --- |

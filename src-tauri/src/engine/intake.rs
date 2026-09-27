@@ -4,7 +4,7 @@
 //! A folder change is only a hint to look: what counts is a scan compared
 //! against each workflow's record of the files it has seen, by device and
 //! inode, so a renamed file is still the same file. A file is recorded before
-//! its run is queued, so it runs at most once. Files FolderFlow puts in a
+//! its run is queued, so it runs at most once. Files Vela puts in a
 //! watched folder are recorded as they land (`Writes`) and start nothing.
 
 use std::collections::{HashMap, HashSet};
@@ -81,7 +81,7 @@ pub struct Intake {
 #[derive(Default)]
 struct State {
     on: HashMap<String, Watching>,
-    /// Paths FolderFlow is putting a file at right now, with how many times.
+    /// Paths Vela is putting a file at right now, with how many times.
     writing: HashMap<PathBuf, u32>,
 }
 
@@ -183,7 +183,7 @@ impl Intake {
     }
 
     /// The workflow's new files, oldest first, each recorded as seen so it's
-    /// never taken again. Files FolderFlow is writing are passed over, and so
+    /// never taken again. Files Vela is writing are passed over, and so
     /// are files not ready yet (`ready`); none of those is recorded, so a
     /// later look takes them.
     pub fn take(&self, id: &str) -> io::Result<Vec<RunFile>> {
@@ -217,7 +217,7 @@ impl Intake {
     }
 
     /// Records the file at `path` as seen by every workflow watching where it
-    /// is: FolderFlow put it there.
+    /// is: Vela put it there.
     pub fn ours(&self, path: &Path) {
         let mut state = self.lock();
         ours(&mut state, path);
@@ -240,7 +240,7 @@ fn ours(state: &mut State, path: &Path) {
         if watching.watch.holds(path) && watching.seen.insert(key(&meta)) {
             let line = seen_line(path.to_path_buf(), &meta);
             if let Err(e) = append(&mut watching.record, &[line]) {
-                eprintln!("folderflow: couldn't record {}: {e}", path.display());
+                eprintln!("vela: couldn't record {}: {e}", path.display());
             }
         }
     }

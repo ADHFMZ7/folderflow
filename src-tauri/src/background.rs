@@ -1,7 +1,7 @@
-//! FolderFlow in the menu bar (decision 3). Closing the window hides it and
+//! Vela in the menu bar (decision 3). Closing the window hides it and
 //! the Dock icon while workflows keep running; the menu bar icon shows what
 //! the engine is doing, and opens the window, pauses or quits. Opened at
-//! login, FolderFlow starts there with no window. See docs/engine.md,
+//! login, Vela starts there with no window. See docs/engine.md,
 //! "Background".
 
 use std::path::Path;
@@ -15,9 +15,9 @@ use tauri_plugin_autostart::ManagerExt as _;
 
 use crate::engine::{Activity, Engine};
 
-const TRAY: &str = "folderflow";
+const TRAY: &str = "vela";
 
-/// Passed to FolderFlow when macOS opens it at login.
+/// Passed to Vela when macOS opens it at login.
 pub const AT_LOGIN: &str = "--at-login";
 
 /// How long quitting waits for runs in progress to finish the step they are on.
@@ -56,7 +56,7 @@ pub fn entries(activity: Activity) -> Vec<Entry> {
         n => out.push(item("needs-you", format!("{n} need you"))),
     }
     out.push(Entry::Separator);
-    out.push(item("open", "Open FolderFlow"));
+    out.push(item("open", "Open Vela"));
     out.push(item(
         "pause",
         if activity.paused {
@@ -66,7 +66,7 @@ pub fn entries(activity: Activity) -> Vec<Entry> {
         },
     ));
     out.push(Entry::Separator);
-    out.push(item("quit", "Quit FolderFlow"));
+    out.push(item("quit", "Quit Vela"));
     out
 }
 
@@ -133,7 +133,7 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY)
         .icon(icon(activity))
         .icon_as_template(true)
-        .tooltip(format!("FolderFlow: {}", status(activity)))
+        .tooltip(format!("Vela: {}", status(activity)))
         .menu(&menu(app.handle(), activity)?)
         .on_menu_event(on_menu)
         .build(app)?;
@@ -153,7 +153,7 @@ pub fn show_activity(app: &AppHandle, activity: Activity) {
         }
         let _ = tray.set_icon(Some(icon(activity)));
         let _ = tray.set_icon_as_template(true);
-        let _ = tray.set_tooltip(Some(format!("FolderFlow: {}", status(activity))));
+        let _ = tray.set_tooltip(Some(format!("Vela: {}", status(activity))));
     });
 }
 
@@ -171,7 +171,7 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
             tauri::async_runtime::spawn_blocking(move || {
                 let paused = engine.activity().paused;
                 if let Err(e) = engine.pause_all(!paused) {
-                    eprintln!("folderflow: {}", e.message);
+                    eprintln!("vela: {}", e.message);
                 }
             });
         }
@@ -180,7 +180,7 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-/// Shows the window, with FolderFlow back in the Dock.
+/// Shows the window, with Vela back in the Dock.
 pub fn show_window(app: &AppHandle) {
     let _ = app.set_dock_visibility(true);
     if let Some(window) = app.get_webview_window("main") {
@@ -190,19 +190,19 @@ pub fn show_window(app: &AppHandle) {
     }
 }
 
-/// Hides the window and the Dock icon; FolderFlow stays in the menu bar.
+/// Hides the window and the Dock icon; Vela stays in the menu bar.
 pub fn hide_window(window: &Window) {
     let _ = window.hide();
     let _ = window.app_handle().set_dock_visibility(false);
 }
 
-/// Whether macOS opened FolderFlow at login, rather than the person.
+/// Whether macOS opened Vela at login, rather than the person.
 pub fn opened_at_login() -> bool {
     std::env::args().any(|a| a == AT_LOGIN)
 }
 
-/// Adds or removes FolderFlow's login item to match the setting. Only
-/// FolderFlow.app does: a development build would add its bare binary.
+/// Adds or removes Vela's login item to match the setting. Only
+/// Vela.app does: a development build would add its bare binary.
 pub fn open_at_login(app: &AppHandle, on: bool) {
     match std::env::current_exe() {
         Ok(exe) if in_app_bundle(&exe) => {}
@@ -218,7 +218,7 @@ pub fn open_at_login(app: &AppHandle, on: bool) {
         launcher.disable()
     };
     if let Err(e) = result {
-        eprintln!("folderflow: couldn't change the login item: {e}");
+        eprintln!("vela: couldn't change the login item: {e}");
     }
 }
 
@@ -262,10 +262,10 @@ mod tests {
             [
                 "(Nothing running)",
                 "-",
-                "Open FolderFlow",
+                "Open Vela",
                 "Pause all",
                 "-",
-                "Quit FolderFlow"
+                "Quit Vela"
             ]
         );
         assert_eq!(read(activity(false, 2, 0))[0], "(2 running)");
@@ -299,10 +299,10 @@ mod tests {
     #[test]
     fn only_an_app_bundle_changes_the_login_item() {
         assert!(in_app_bundle(Path::new(
-            "/Applications/FolderFlow.app/Contents/MacOS/folderflow"
+            "/Applications/Vela.app/Contents/MacOS/vela"
         )));
         assert!(!in_app_bundle(Path::new(
-            "/Users/me/folderflow/src-tauri/target/debug/folderflow"
+            "/Users/me/vela/src-tauri/target/debug/vela"
         )));
     }
 }

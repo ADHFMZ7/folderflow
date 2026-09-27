@@ -6,11 +6,11 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 
-use folderflow_lib::api::types::{ErrorCode, WorkflowStatus, WorkflowSummary};
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
-use folderflow_lib::workflow::{Every, ProblemCode, Schedule, StepKind, Workflow};
 use serde_json::json;
+use vela_lib::api::types::{ErrorCode, WorkflowStatus, WorkflowSummary};
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
+use vela_lib::workflow::{Every, ProblemCode, Schedule, StepKind, Workflow};
 
 use common::api::{offline_harness, Harness};
 
@@ -370,7 +370,7 @@ fn validate_uses_the_current_settings_and_writes_nothing() {
 }
 
 fn build_unsaved() -> Workflow {
-    folderflow_lib::workflow::templates::build("receipts").unwrap()
+    vela_lib::workflow::templates::build("receipts").unwrap()
 }
 
 #[test]

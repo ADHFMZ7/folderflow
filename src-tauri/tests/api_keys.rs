@@ -4,9 +4,9 @@
 
 mod common;
 
-use folderflow_lib::api::types::{ConnectOutcome, Credentials};
-use folderflow_lib::storage::secrets::Secret;
 use serde_json::json;
+use vela_lib::api::types::{ConnectOutcome, Credentials};
+use vela_lib::storage::secrets::Secret;
 
 use common::api::{
     creds, harness, key, mount_anthropic, mount_ollama, mount_openai_style, mount_status,

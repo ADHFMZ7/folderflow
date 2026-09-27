@@ -8,13 +8,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset};
-use folderflow_lib::engine::runs::{Run, RunStatus};
-use folderflow_lib::engine::{
+use vela_lib::engine::runs::{Run, RunStatus};
+use vela_lib::engine::{
     Activity, Clock, Engine, EngineEvents, Notifier, Ports, RunChanged, Watcher,
 };
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::workflows::WorkflowStore;
-use folderflow_lib::workflow::Workflow;
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::workflows::WorkflowStore;
+use vela_lib::workflow::Workflow;
 
 use super::files::FolderTrash;
 use serde_json::Value;
@@ -59,7 +59,7 @@ pub struct Notes {
 impl Notifier for Notes {
     fn notify(&self, title: &str, body: &str) -> Result<(), String> {
         if self.refuse {
-            return Err("Notifications are off for FolderFlow".into());
+            return Err("Notifications are off for Vela".into());
         }
         self.shown
             .lock()
@@ -322,8 +322,8 @@ impl EngineHarness {
 
     /// Connects a model for every AI kind, so AI steps pass validation.
     pub fn set_models(&self) {
-        use folderflow_lib::storage::data_dir::DataDir;
-        use folderflow_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
+        use vela_lib::storage::data_dir::DataDir;
+        use vela_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
         let model = Some(ModelRef {
             connection_id: "c1".into(),
             model_id: "m".into(),

@@ -1,6 +1,6 @@
 //! File added: a workflow runs once for each file that lands in its folder,
 //! never for files that were there before it was on, and never for files
-//! FolderFlow itself put there. Folder events are told to the engine by the
+//! Vela itself put there. Folder events are told to the engine by the
 //! test, as FSEvents would. See docs/engine.md, "File added", and the
 //! running-away risk in TESTING.md.
 
@@ -11,11 +11,11 @@ use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::process::Command;
 
-use folderflow_lib::engine::runs::{Run, RunStatus, TriggerKind};
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::workflows::WorkflowStore;
-use folderflow_lib::workflow::Workflow;
 use serde_json::{json, Value};
+use vela_lib::engine::runs::{Run, RunStatus, TriggerKind};
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::workflows::WorkflowStore;
+use vela_lib::workflow::Workflow;
 
 use common::engine::{engine, EngineHarness};
 use common::files::names;
@@ -309,7 +309,7 @@ async fn files_that_arrive_while_the_app_is_quit_run_at_start_oldest_first() {
 }
 
 #[tokio::test]
-async fn files_folderflow_moves_writes_or_copies_into_a_watched_folder_start_nothing() {
+async fn files_vela_moves_writes_or_copies_into_a_watched_folder_start_nothing() {
     let mut h = engine();
     // Inbox is watched by a workflow that tags whatever arrives.
     let inbox = tagger(&h, "~/Documents/Inbox", &[], false);
@@ -508,7 +508,7 @@ async fn the_screenshots_template_files_new_screenshots_only() {
     let mut h = engine();
     let store = WorkflowStore::new(&DataDir::open(&h.root).unwrap());
     let wf = store
-        .create(folderflow_lib::workflow::templates::build("screenshots").unwrap())
+        .create(vela_lib::workflow::templates::build("screenshots").unwrap())
         .unwrap();
     fs::create_dir_all(h.home.join("Desktop")).unwrap();
     put(&h, "Desktop/Screenshot 2026-09-01 at 08.00.00.png");

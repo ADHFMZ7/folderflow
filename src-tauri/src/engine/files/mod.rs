@@ -1,4 +1,4 @@
-//! Every change FolderFlow makes to a person's files goes through here. See
+//! Every change Vela makes to a person's files goes through here. See
 //! docs/engine.md, "File safety".
 //!
 //! - Nothing is overwritten: names are claimed with `renamex_np(RENAME_EXCL)`,
@@ -84,13 +84,13 @@ pub trait Trash: Send + Sync {
     fn trash(&self, path: &Path) -> io::Result<()>;
 }
 
-/// Hears of every file FolderFlow is about to put somewhere and whether it
+/// Hears of every file Vela is about to put somewhere and whether it
 /// did, so a workflow watching that folder doesn't take it for a new file
 /// (docs/engine.md, decision 8).
 pub trait Writes: Send + Sync {
     /// Before a file is put at `path`.
     fn writing(&self, path: &Path);
-    /// After: `written` is whether FolderFlow's file is at `path` now.
+    /// After: `written` is whether Vela's file is at `path` now.
     fn finished(&self, path: &Path, written: bool);
 }
 
@@ -414,7 +414,7 @@ impl Files {
             let before = match fs::symlink_metadata(&path) {
                 Ok(meta) if meta.file_type().is_symlink() => {
                     return Err(FileError(format!(
-                        "{name} is a link, so FolderFlow won't change it."
+                        "{name} is a link, so Vela won't change it."
                     )))
                 }
                 Ok(meta) if !meta.is_file() => {
@@ -474,7 +474,7 @@ impl Files {
             }
         }
         Err(FileError(format!(
-            "{name} kept changing while FolderFlow was adding a row, so it was left as it is."
+            "{name} kept changing while Vela was adding a row, so it was left as it is."
         )))
     }
 
@@ -510,7 +510,7 @@ impl Files {
         match fs::symlink_metadata(folder.join(&name)) {
             Ok(meta) if meta.is_file() => Ok((folder, name)),
             Ok(meta) if meta.file_type().is_symlink() => Err(FileError(format!(
-                "{name} is a link, so FolderFlow won't change it."
+                "{name} is a link, so Vela won't change it."
             ))),
             Ok(_) => Err(FileError(format!("{name} isn't a file."))),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -767,7 +767,7 @@ impl Failed {
     fn into_error(self, name: &str, verb: &str) -> FileError {
         match self {
             Failed::Io(e) => io_error(name, verb, e),
-            Failed::Crashed => FileError("Stopped as if FolderFlow had quit.".into()),
+            Failed::Crashed => FileError("Stopped as if Vela had quit.".into()),
         }
     }
 }
@@ -775,7 +775,7 @@ impl Failed {
 fn io_error(name: &str, verb: &str, e: io::Error) -> FileError {
     if e.kind() == io::ErrorKind::PermissionDenied {
         return FileError(format!(
-            "FolderFlow isn't allowed to {verb} {name}. If it's in Desktop, Documents or Downloads, allow FolderFlow in System Settings › Privacy & Security › Files and Folders."
+            "Vela isn't allowed to {verb} {name}. If it's in Desktop, Documents or Downloads, allow Vela in System Settings › Privacy & Security › Files and Folders."
         ));
     }
     FileError(format!("Couldn't {verb} {name}: {e}."))
@@ -783,7 +783,7 @@ fn io_error(name: &str, verb: &str, e: io::Error) -> FileError {
 
 fn too_many(name: &str) -> FileError {
     FileError(format!(
-        "There are already {MAX_NUMBER} files named like {name}, so FolderFlow stopped numbering them."
+        "There are already {MAX_NUMBER} files named like {name}, so Vela stopped numbering them."
     ))
 }
 

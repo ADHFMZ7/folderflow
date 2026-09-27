@@ -3,8 +3,8 @@
 
 mod common;
 
-use folderflow_lib::api::types::ErrorCode;
-use folderflow_lib::workflow::Workflow;
+use vela_lib::api::types::ErrorCode;
+use vela_lib::workflow::Workflow;
 
 use common::api::{offline_harness, Harness};
 

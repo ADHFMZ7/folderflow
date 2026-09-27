@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
-use folderflow_lib::workflow::{
+use vela_lib::workflow::{
     validate, Branch, Category, Condition, Every, Field, FieldType, IfMissing, MoveMode, Op,
     Position, Problem, ProblemCode, Schedule, Step, StepKind, Workflow,
 };
@@ -1337,7 +1337,7 @@ fn a_forbidden_folder_says_what_to_do() {
     let problem = &problems_of(&w, FolderNotAllowed)[0];
     assert_eq!(
         problem.message,
-        "FolderFlow doesn't work in ~/Library/Mail. Choose a folder inside your home folder, like ~/Documents."
+        "Vela doesn't work in ~/Library/Mail. Choose a folder inside your home folder, like ~/Documents."
     );
 }
 

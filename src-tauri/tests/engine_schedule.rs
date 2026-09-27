@@ -6,9 +6,9 @@
 mod common;
 
 use chrono::{DateTime, FixedOffset, Local, TimeZone};
-use folderflow_lib::engine::runs::{RunStatus, TriggerKind};
-use folderflow_lib::workflow::Workflow;
 use serde_json::json;
+use vela_lib::engine::runs::{RunStatus, TriggerKind};
+use vela_lib::workflow::Workflow;
 
 use common::engine::{engine, EngineHarness};
 

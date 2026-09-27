@@ -64,7 +64,7 @@ export function FileAddedForm({ step, onChange }: FormProps<"fileAdded">) {
   return (
     <>
       <FolderField label="Folder to watch" field="folder" value={step.folder} onChange={(folder) => onChange({ ...step, folder })}
-        hint="Runs once for each new file here. Files FolderFlow makes itself never start it." />
+        hint="Runs once for each new file here. Files Vela makes itself never start it." />
       <FileTypes value={step.fileTypes} onChange={(fileTypes) => onChange({ ...step, fileTypes })} />
       <Toggle label="Include files in subfolders" checked={step.subfolders} onChange={(subfolders) => onChange({ ...step, subfolders })} />
       <Note>The next steps can use the file's name, extension, folder, the date it was added, and the year.</Note>

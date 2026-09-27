@@ -89,7 +89,7 @@ export type MockOptions = {
   chosenFiles?: string[];
 };
 
-const SETTINGS_KEY = "folderflow.settings";
+const SETTINGS_KEY = "vela.settings";
 
 function memoryStore(): KeyValueStore {
   const data = new Map<string, string>();
@@ -103,7 +103,7 @@ export function createMockApi(options: MockOptions = {}): Api {
   let connectionCount = 0;
   // Like the Rust core, a recovery is reported by every getSettings for the rest of the session.
   const notice: SettingsNotice = options.storedFile === "damaged"
-    ? { kind: "recovered", backup: "~/Library/Application Support/com.adhfmz7.folderflow/settings.damaged-1790300000-3f2a9c1e.json" }
+    ? { kind: "recovered", backup: "~/Library/Application Support/com.adhfmz7.vela/settings.damaged-1790300000-3f2a9c1e.json" }
     : null;
   if (options.settings) write({ ...FRESH_SETTINGS, ...options.settings });
 
@@ -111,7 +111,7 @@ export function createMockApi(options: MockOptions = {}): Api {
   const runRecords: Run[] = [];
 
   // Workflows, keyed by id; sample ones come with made-up past runs for previews.
-  const WORKFLOWS_KEY = "folderflow.workflows";
+  const WORKFLOWS_KEY = "vela.workflows";
   const readWorkflows = (): Record<string, Workflow> => JSON.parse(storage.getItem(WORKFLOWS_KEY) ?? "{}");
   const writeWorkflows = (all: Record<string, Workflow>) => storage.setItem(WORKFLOWS_KEY, JSON.stringify(all));
   if (options.sampleWorkflows && !storage.getItem(WORKFLOWS_KEY)) {
@@ -134,7 +134,7 @@ export function createMockApi(options: MockOptions = {}): Api {
   const put = (wf: Workflow) => writeWorkflows({ ...readWorkflows(), [wf.id]: wf });
 
   // Drafts, keyed by workflow id, following the same rules as the Rust core.
-  const DRAFTS_KEY = "folderflow.drafts";
+  const DRAFTS_KEY = "vela.drafts";
   const readDrafts = (): Record<string, Workflow> => JSON.parse(storage.getItem(DRAFTS_KEY) ?? "{}");
   const writeDrafts = (all: Record<string, Workflow>) => storage.setItem(DRAFTS_KEY, JSON.stringify(all));
   const dropDraft = (id: string) => {
@@ -220,7 +220,7 @@ export function createMockApi(options: MockOptions = {}): Api {
 
   function read(): Settings {
     if (options.storedFile === "tooNew") {
-      throw new ApiError("too_new", "the settings file is from a newer version of FolderFlow (format 2)");
+      throw new ApiError("too_new", "the settings file is from a newer version of Vela (format 2)");
     }
     const raw = storage.getItem(SETTINGS_KEY);
     return raw ? { ...FRESH_SETTINGS, ...JSON.parse(raw) } : FRESH_SETTINGS;
@@ -236,7 +236,7 @@ export function createMockApi(options: MockOptions = {}): Api {
   const faulty = (providerId: string) => {
     if (!options.faultyProviders?.includes(providerId)) return;
     const name = PROVIDERS.find((p) => p.id === providerId)?.name ?? providerId;
-    throw new ApiError("provider", `${name} sent an answer FolderFlow couldn't read. Try again later.`);
+    throw new ApiError("provider", `${name} sent an answer Vela couldn't read. Try again later.`);
   };
 
   const isWorking = (settings: Settings, ref: ModelRef | null | undefined) =>
@@ -416,7 +416,7 @@ export function createMockApi(options: MockOptions = {}): Api {
 
     async resumeRun(runId) {
       const run = runOf(runId);
-      if (run.status !== "interrupted") throw new ApiError("conflict", "Only a run FolderFlow stopped by quitting can be resumed.");
+      if (run.status !== "interrupted") throw new ApiError("conflict", "Only a run Vela stopped by quitting can be resumed.");
       const last = run.steps[run.steps.length - 1];
       if (last?.outcome === "done") {
         const next = after(run.workflow, last.stepId, last.branch);
@@ -490,7 +490,7 @@ export function createMockApi(options: MockOptions = {}): Api {
 
     async createWorkflow(templateId) {
       const wf = templateId === null ? blankWorkflow() : templateWorkflow(templateId);
-      if (!wf) throw new ApiError("not_found", "FolderFlow doesn't have that template.");
+      if (!wf) throw new ApiError("not_found", "Vela doesn't have that template.");
       put(wf);
       return wf;
     },

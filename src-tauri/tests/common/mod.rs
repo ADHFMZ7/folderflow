@@ -10,8 +10,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::secrets::{MemorySecretStore, Secret, SecretError, SecretStore};
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::secrets::{MemorySecretStore, Secret, SecretError, SecretStore};
 
 /// A fresh data folder inside a temp dir that is deleted when the guard drops.
 pub fn data_dir() -> (tempfile::TempDir, DataDir) {

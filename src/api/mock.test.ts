@@ -397,7 +397,7 @@ describe("runs", () => {
     await until(a, queued.id, "failed");
 
     const run = await a.getRun(queued.id);
-    expect(run.error).toEqual({ stepId: "q", message: "Write steps can't run in this version of FolderFlow yet." });
+    expect(run.error).toEqual({ stepId: "q", message: "Write steps can't run in this version of Vela yet." });
     expect((await a.listRuns({ status: "failed" }))[0].error).toBe(run.error!.message);
   });
 

@@ -50,7 +50,7 @@ pub fn sync_dir(dir: &Path) -> io::Result<()> {
     File::open(dir)?.sync_all()
 }
 
-/// What a file was when FolderFlow last touched it. A file that no longer
+/// What a file was when Vela last touched it. A file that no longer
 /// matches has been changed by someone else since, and is left alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stamp {
@@ -159,7 +159,7 @@ fn raw_tags(path: &Path) -> io::Result<Vec<String>> {
         return Err(io::Error::last_os_error());
     }
     buf.truncate(read as usize);
-    // Tags another app wrote in a shape FolderFlow doesn't know are kept as none
+    // Tags another app wrote in a shape Vela doesn't know are kept as none
     // rather than failing the run; they're only replaced if a tag is added.
     Ok(plist::from_bytes::<Vec<String>>(&buf).unwrap_or_default())
 }
