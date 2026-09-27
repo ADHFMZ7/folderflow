@@ -12,7 +12,7 @@ function toApiError(e: unknown): ApiError {
   if (e && typeof e === "object" && "code" in e && "message" in e && CODES.includes(e.code as ApiErrorCode)) {
     return new ApiError(e.code as ApiErrorCode, String(e.message));
   }
-  return new ApiError("io", typeof e === "string" ? e : "FolderFlow's core didn't respond as expected.");
+  return new ApiError("io", typeof e === "string" ? e : "Vela's core didn't respond as expected.");
 }
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {

@@ -6,10 +6,10 @@ mod common;
 
 use std::fs;
 
-use folderflow_lib::api::types::ErrorCode;
-use folderflow_lib::engine::files::sys;
-use folderflow_lib::engine::runs::{RunStatus, StepOutcome};
 use serde_json::{json, Value};
+use vela_lib::api::types::ErrorCode;
+use vela_lib::engine::files::sys;
+use vela_lib::engine::runs::{RunStatus, StepOutcome};
 
 use common::engine::{engine, EngineHarness};
 use common::files::names;
@@ -28,7 +28,7 @@ fn steps(steps: Value) -> Value {
 /// Run now → Rename "{dateAdded} {file}" → Tag "Screenshot" → Move to
 /// ~/Pictures/Screenshots/{year} → Copy to ~/Backup → Create file in
 /// {newFolder} → Add row to ~/Documents/Log.csv.
-fn tidy(h: &EngineHarness) -> folderflow_lib::workflow::Workflow {
+fn tidy(h: &EngineHarness) -> vela_lib::workflow::Workflow {
     h.workflow(
         "Tidy screenshots",
         steps(json!([

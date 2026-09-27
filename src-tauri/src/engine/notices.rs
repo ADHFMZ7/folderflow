@@ -1,4 +1,4 @@
-//! What FolderFlow tells the person: questions, failed runs, Notify steps and
+//! What Vela tells the person: questions, failed runs, Notify steps and
 //! undos that left files alone. Each goes to macOS's notifications and to the
 //! list under the bell, kept in `engine/notifications.json`, so nothing is
 //! missed when macOS doesn't show it.
@@ -136,7 +136,7 @@ impl Notices {
             write_atomic(&self.path, &bytes)
         })();
         if let Err(e) = result {
-            eprintln!("folderflow: couldn't save the notifications: {e}");
+            eprintln!("vela: couldn't save the notifications: {e}");
         }
     }
 

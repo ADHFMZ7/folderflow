@@ -1,4 +1,4 @@
-//! The bell and Pause all: everything FolderFlow tells the person is kept in
+//! The bell and Pause all: everything Vela tells the person is kept in
 //! a list as well as sent to macOS, and pausing stops new runs from folders
 //! and schedules until resumed. See docs/engine.md, "Notifications" and
 //! "Pause all".
@@ -7,9 +7,9 @@ mod common;
 
 use std::fs;
 
-use folderflow_lib::engine::notices::NoticeKind;
-use folderflow_lib::engine::runs::RunStatus;
 use serde_json::{json, Value};
+use vela_lib::engine::notices::NoticeKind;
+use vela_lib::engine::runs::RunStatus;
 
 use common::engine::{engine, engine_with, EngineHarness, Notes};
 use common::files::names;
@@ -25,7 +25,7 @@ fn steps(steps: Value) -> Value {
     steps
 }
 
-fn say(h: &EngineHarness) -> folderflow_lib::workflow::Workflow {
+fn say(h: &EngineHarness) -> vela_lib::workflow::Workflow {
     h.workflow(
         "Say",
         steps(json!([

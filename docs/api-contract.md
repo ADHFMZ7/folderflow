@@ -53,7 +53,7 @@ Runs, the events (`onRunChanged`, `onNoticesChanged`, `onActivityChanged` and `o
 
   | Code | Meaning |
   | --- | --- |
-  | `too_new` | The settings file comes from a newer FolderFlow and was left untouched |
+  | `too_new` | The settings file comes from a newer Vela and was left untouched |
   | `not_found` | Unknown provider, connection, workflow or run |
   | `invalid` | The request breaks a rule, such as a default pointing at a missing connection, or `detect` on a provider that isn't connected by detection |
   | `keychain` | The Keychain refused a request |
@@ -62,4 +62,4 @@ Runs, the events (`onRunChanged`, `onNoticesChanged`, `onActivityChanged` and `o
   | `conflict` | A save was based on an older revision than the one on disk |
 
 - **Pickers open from Rust.** `choose_folder` and `choose_csv` show the native macOS panel in front of the window (`tauri-plugin-dialog`, used from Rust, so the window needs no dialog permission). They start in `start` when it names an existing folder, or the folder of an existing file, and answer with the chosen path, the home folder written as `~`, or `null` when cancelled. `choose_csv` picks an existing .csv; a new file's path is typed. `choose_files` picks one or more files to run a workflow on, and answers with none when cancelled. The mock answers with `MockOptions.chosenFolder` / `chosenCsv` (null is a cancel) / `chosenFiles` (empty is a cancel), or a sample path in previews.
-- **Load notices.** `getSettings` returns `notice: { kind: "recovered", backup }` when the settings file was unreadable and was moved aside, and keeps returning it for the rest of the session, so a second call (React Strict Mode, a remount) can't lose it. Dismissing it only hides it in the UI. A file from a newer version fails with `too_new`, and the UI blocks until the user opens a newer FolderFlow.
+- **Load notices.** `getSettings` returns `notice: { kind: "recovered", backup }` when the settings file was unreadable and was moved aside, and keeps returning it for the rest of the session, so a second call (React Strict Mode, a remount) can't lose it. Dismissing it only hides it in the UI. A file from a newer version fails with `too_new`, and the UI blocks until the user opens a newer Vela.

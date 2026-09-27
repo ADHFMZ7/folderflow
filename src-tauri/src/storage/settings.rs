@@ -107,8 +107,8 @@ pub struct Loaded {
 pub enum SettingsError {
     #[error("couldn't read or write the settings file: {0}")]
     Io(#[from] std::io::Error),
-    /// Written by a newer FolderFlow. Left untouched so switching back loses nothing.
-    #[error("the settings file is from a newer version of FolderFlow (format {found})")]
+    /// Written by a newer Vela. Left untouched so switching back loses nothing.
+    #[error("the settings file is from a newer version of Vela (format {found})")]
     TooNew { found: u32 },
 }
 
@@ -152,7 +152,7 @@ impl SettingsStore {
     }
 
     pub fn save(&self, settings: &Settings) -> Result<(), SettingsError> {
-        // Never replace a file a newer FolderFlow wrote.
+        // Never replace a file a newer Vela wrote.
         match fs::read(&self.path) {
             Ok(bytes) => {
                 if let Parsed::TooNew(found) = parse(&bytes) {

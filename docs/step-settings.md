@@ -66,7 +66,7 @@ Labels are what the user sees. Defaults are what `defaultStep` in graph.ts alrea
 
 | Step | Controls | Helper text |
 | --- | --- | --- |
-| **File added** | **Folder to watch**: FolderField (`~/Downloads`). **Which files**: FileTypes (any). **Include files in subfolders**: Toggle (off). | "Runs once for each new file. Files FolderFlow creates itself never start it." Lists the details it provides: "Gives the next steps: the file's name, extension, folder, the date it was added, and the year." |
+| **File added** | **Folder to watch**: FolderField (`~/Downloads`). **Which files**: FileTypes (any). **Include files in subfolders**: Toggle (off). | "Runs once for each new file. Files Vela creates itself never start it." Lists the details it provides: "Gives the next steps: the file's name, extension, folder, the date it was added, and the year." |
 | **Schedule** | **How often**: Segmented Every day / Weekdays / Once a week. **Day**: Select Sunday…Saturday, only for "Once a week" (switching to weekly sets Friday; switching away removes `weekday`). **Time**: `<input type="time">` (HH:MM, 24-hour stored). | "Gives the next steps today's date and the year. There's no file in a scheduled run." |
 | **Run now** | None. | "Runs when you pick files and choose Run. Gives the same details as File added." |
 
@@ -98,7 +98,7 @@ What makes them work well, and how we ask for it without jargon:
 | --- | --- | --- |
 | **If** | A sentence: **If** [left: Select of available details, or "Custom text…" which reveals a VariableText] [op: Select] [right: VariableText]. Ops in plain words: is (=), is not (!=), is more than (>), is less than (<), is at least (>=), is at most (<=), contains, starts with. For a Number or Date detail the comparisons come first; for Yes or no the right side becomes a Yes / No Segmented. | "Yes and No are the two exits on the card." |
 | **Stop** | None. | "The run ends here. Use it to make an ending obvious; a step with nothing after it ends too." |
-| **Ask me** | **Question**: VariableText. **Answers**: ListEditor (at least two; each an exit). | "The run waits here until you answer in FolderFlow. `{answer}` holds your choice." Preview of the question. |
+| **Ask me** | **Question**: VariableText. **Answers**: ListEditor (at least two; each an exit). | "The run waits here until you answer in Vela. `{answer}` holds your choice." Preview of the question. |
 
 ## Variables
 

@@ -302,7 +302,7 @@ pub enum ProblemCode {
     UnknownVariable,
     NoModel,
     InvalidValue,
-    /// A path names a folder FolderFlow never works in.
+    /// A path names a folder Vela never works in.
     FolderNotAllowed,
 }
 

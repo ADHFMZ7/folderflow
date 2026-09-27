@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, and 9.
+How Vela runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, and 9.
 
 ## Summary
 
@@ -18,12 +18,12 @@ It must hold the critical risks in `TESTING.md`: no lost files, nothing outside 
 |---|---|---|---|
 | 1 | Classify with no System 1 model set | Use the default LLM model instead, with the same constrained answer. `no_model` only when neither is set. The "Runs on" line says which is used. | Most people will connect one LLM and nothing else; Classify shouldn't block their first workflow. |
 | 2 | Files already in the folder when a workflow is turned on | Leave them alone. Only files that arrive after it's on are run. Later, turning on can offer "Also run on the 14 files already there". | Turning on a workflow must never surprise-rename a folder full of old files. |
-| 3 | The window is closed | Workflows keep running, with a menu bar icon (Open FolderFlow, Pause all, Quit). Quit stops them. | A file automation that stops when you close a window isn't one. |
+| 3 | The window is closed | Workflows keep running, with a menu bar icon (Open Vela, Pause all, Quit). Quit stops them. | A file automation that stops when you close a window isn't one. |
 | 4 | A run fails part way | Keep what was done; the run shows in Needs you with Retry from the failed step and Undo run. No automatic rollback. | Rolling back hides the problem and can fail too. The person decides. |
 | 5 | The app quits or crashes mid-run | The run is marked interrupted and shows in Needs you with Resume and Undo. It isn't resumed on its own. | Resuming on its own could repeat an AI call or an action nobody asked for twice. |
 | 6 | File steps after a Schedule trigger | Refused by validation for now (`needs_file`). A later version can give Schedule a folder to go through. | A scheduled run has no file to rename or move. |
 | 7 | How long history is kept | The last 1,000 runs per workflow. Runs waiting for you, and their undo records, are never removed. | Enough to undo last month's mistakes; small on disk. |
-| 8 | Workflows triggering each other | Never. Files FolderFlow writes don't start any workflow, not only their own. | Chains are a feature for later; loops are a disaster now. |
+| 8 | Workflows triggering each other | Never. Files Vela writes don't start any workflow, not only their own. | Chains are a feature for later; loops are a disaster now. |
 | 9 | Waiting for a file to finish being written | Don't. A file is taken as soon as a scan finds it; names browsers use while downloading, and empty files, are skipped. | File added is for downloads and files dragged in. Browsers download under a temporary name and rename when done, and a drag on the same disk is one rename. Waiting would add seconds to every run for a case these don't have. |
 
 ## Shape
@@ -52,7 +52,7 @@ The engine is a set of modules in `src-tauri/src/engine/`, each with one job. On
 
 ## Triggers and intake
 
-A file runs a workflow once, when it is complete, and never because FolderFlow itself put it there. Folder events are only a hint to look; what counts is a scan of the folder compared against the record of files already seen.
+A file runs a workflow once, when it is complete, and never because Vela itself put it there. Folder events are only a hint to look; what counts is a scan of the folder compared against the record of files already seen.
 
 ### File added
 
@@ -66,11 +66,11 @@ A file runs a workflow once, when it is complete, and never because FolderFlow i
 
 **While the app was quit.** On start, each watched folder is scanned once. Files that arrived in the meantime and aren't in the record are run, oldest first.
 
-**FolderFlow's own files.** Before any action puts a file somewhere (rename, move, copy, create file, add row, and undo putting one back), `files` tells intake the path. A scan passes over that path until the action is over, and then the file is recorded as seen for every workflow watching that folder (decision 8). If the app crashes in between, the journal's recovery at the next start names the path, and it is recorded then, before any folder is scanned.
+**Vela's own files.** Before any action puts a file somewhere (rename, move, copy, create file, add row, and undo putting one back), `files` tells intake the path. A scan passes over that path until the action is over, and then the file is recorded as seen for every workflow watching that folder (decision 8). If the app crashes in between, the journal's recovery at the next start names the path, and it is recorded then, before any folder is scanned.
 
 ### Schedule
 
-The next time is worked out in the Mac's local time zone, so daylight saving changes are handled: a time the clocks skip runs when they land (2:30 on the spring-forward night runs at 3:00), and a time that happens twice runs the first time. If the Mac was asleep or FolderFlow was quit at that time, the workflow runs once when it's back, as long as that is within 12 hours. It never runs more than once to catch up. Turning a schedule on, or changing its time, doesn't run for times already past.
+The next time is worked out in the Mac's local time zone, so daylight saving changes are handled: a time the clocks skip runs when they land (2:30 on the spring-forward night runs at 3:00), and a time that happens twice runs the first time. If the Mac was asleep or Vela was quit at that time, the workflow runs once when it's back, as long as that is within 12 hours. It never runs more than once to catch up. Turning a schedule on, or changing its time, doesn't run for times already past.
 
 `engine/schedules.json` keeps, for each scheduled workflow that's on, the time up to which it has been checked, so a restart neither misses nor repeats a time. The engine checks at each due time, and at least once a minute to notice waking from sleep. A scheduled run gives `{date}` and `{year}`.
 
@@ -80,7 +80,7 @@ The person chooses **Run…** in the editor's toolbar and picks one or more file
 
 Before anything is queued, every file is checked: it must exist and be a regular file, not a folder or a link. If any file fails, none runs. A workflow with problems is refused ("Fix the problem with this workflow before running it."), as is a scheduled one. For Run now, `{dateAdded}` is the day the run was queued.
 
-Until a step type is built, a run that reaches it fails with "Write steps can't run in this version of FolderFlow yet.", before touching anything.
+Until a step type is built, a run that reaches it fails with "Write steps can't run in this version of Vela yet.", before touching anything.
 
 ## Runs
 
@@ -158,7 +158,7 @@ A run carrying on (after an answer, a retry or a resume) first checks that its f
 
 ## File safety
 
-FolderFlow never deletes and never overwrites. Every change is written down before it happens, so it can be finished or reversed after a crash, and undone later.
+Vela never deletes and never overwrites. Every change is written down before it happens, so it can be finished or reversed after a crash, and undone later.
 
 ### Granted folders
 
@@ -173,9 +173,9 @@ A path that starts with a variable, like Create file's `{newFolder}`, grants not
 
 Every path is checked just before use: `~` expanded, existing parts resolved through symlinks, `..` refused, and the result must sit inside a granted folder. The comparison ignores case on case-insensitive volumes (the APFS default). A variable's value can't add a folder level, because `/` is already replaced.
 
-Some folders can never be granted, and validation says so (`folder_not_allowed`): `/`, your home folder itself, `~/Library` (which holds FolderFlow's own data folder), `/System` and `/Applications`, in any case. A path that isn't full (`~/…` or `/…`) or that uses `..` is `invalid_value`. The engine skips any such folder when granting, in case a workflow file skipped validation.
+Some folders can never be granted, and validation says so (`folder_not_allowed`): `/`, your home folder itself, `~/Library` (which holds Vela's own data folder), `/System` and `/Applications`, in any case. A path that isn't full (`~/…` or `/…`) or that uses `..` is `invalid_value`. The engine skips any such folder when granting, in case a workflow file skipped validation.
 
-macOS asks for permission the first time an app opens Desktop, Documents or Downloads. If access is refused, the step fails with "FolderFlow isn't allowed to open Downloads. Allow it in System Settings › Privacy & Security › Files and Folders."
+macOS asks for permission the first time an app opens Desktop, Documents or Downloads. If access is refused, the step fails with "Vela isn't allowed to open Downloads. Allow it in System Settings › Privacy & Security › Files and Folders."
 
 ### What each action does
 
@@ -193,7 +193,7 @@ macOS asks for permission the first time an app opens Desktop, Documents or Down
 
 CSV values that start with `=`, `+`, `-`, `@`, a tab or a carriage return get a leading `'`, so a spreadsheet never runs a formula that came from a document. Plain numbers like `-12.50` are left as they are.
 
-Only the file being acted on, and only a regular file, is touched: a link is refused rather than followed. Access refused by macOS says which setting to change ("If it's in Desktop, Documents or Downloads, allow FolderFlow in System Settings › Privacy & Security › Files and Folders.").
+Only the file being acted on, and only a regular file, is touched: a link is refused rather than followed. Access refused by macOS says which setting to change ("If it's in Desktop, Documents or Downloads, allow Vela in System Settings › Privacy & Security › Files and Folders.").
 
 ### The journal
 
@@ -205,7 +205,7 @@ At start-up, an intent without a done line is checked against the disk: if the f
 
 Undo is per run and reverses its actions newest first. Each one first checks that the file is still exactly as the run left it: same inode, size and modification time. A file that has changed since is left alone, and undo lists it ("Invoice 2026-044.pdf was changed after this run, so it wasn't moved back"). If the old name is taken by now, the file comes back with " 2". Undo is recorded in the run, and the run becomes `undone`.
 
-Files FolderFlow made are moved to the Trash, never deleted, so even undo can be undone from Finder. Folders the run created are removed only if they're empty. Undo writes what it did to the journal too, so undoing twice reverses nothing more, and a file undo itself put back still counts as unchanged for the actions before it.
+Files Vela made are moved to the Trash, never deleted, so even undo can be undone from Finder. Folders the run created are removed only if they're empty. Undo writes what it did to the journal too, so undoing twice reverses nothing more, and a file undo itself put back still counts as unchanged for the actions before it.
 
 `Engine::undo_run` does this for a run that is done, failed or interrupted; the Undo button comes with the History page (pull request 4).
 
@@ -227,7 +227,7 @@ An AI step sends the file's text and the step's own instructions to one provider
 | docx | The paragraphs of `word/document.xml`, a line each |
 | pptx | Each slide in order (1, 2 … 10), a line per paragraph, a blank line between slides |
 | xlsx | Each sheet by name, in the workbook's order: a line per row, cells between tabs, shared strings looked up, formulas as their last value, TRUE/FALSE for yes/no |
-| anything else, or nothing readable | No text. The model gets the file name only, and the step says so: "FolderFlow couldn't read any text in X, so the model was given only its name." |
+| anything else, or nothing readable | No text. The model gets the file name only, and the step says so: "Vela couldn't read any text in X, so the model was given only its name." |
 
 Text is cut at 30,000 characters (about the first pages); the step says "X is long, so only its first 30,000 characters were read." Reading stops early rather than reading a whole huge file, and each part of an Office file is capped at 32 MB unpacked. Recognition runs on the Mac, so a local model keeps everything on the Mac.
 
@@ -258,7 +258,7 @@ A loop of up to 8 turns. The model may call only the abilities the step allows. 
 
 ### Errors and waiting
 
-The provider's own reason is kept and shown on the step, without keys (issue #8): "Anthropic says your credit balance is too low", not "an answer FolderFlow couldn't read".
+The provider's own reason is kept and shown on the step, without keys (issue #8): "Anthropic says your credit balance is too low", not "an answer Vela couldn't read".
 
 | Case | Then |
 |---|---|
@@ -294,7 +294,7 @@ Later: the editor opens a workflow's recent runs and highlights the path a run t
 
 ### Notifications
 
-Everything FolderFlow tells the person goes two ways: a macOS notification, and the list under the bell at the top right of the window (`engine/notices.rs`, kept in `engine/notifications.json`, the newest 200). The list is there even when macOS doesn't show a notification, as in development builds or with notifications turned off.
+Everything Vela tells the person goes two ways: a macOS notification, and the list under the bell at the top right of the window (`engine/notices.rs`, kept in `engine/notifications.json`, the newest 200). The list is there even when macOS doesn't show a notification, as in development builds or with notifications turned off.
 
 | Kind | When | Says |
 |---|---|---|
@@ -319,22 +319,22 @@ Next to the bell, a sun or moon switches between light and dark: the same settin
 
 ### Background
 
-FolderFlow keeps running with its window closed (decision 3). This lives in `src-tauri/src/background.rs`, outside the engine.
+Vela keeps running with its window closed (decision 3). This lives in `src-tauri/src/background.rs`, outside the engine.
 
-- **Closing the window** (the red button or ⌘W) hides it and takes FolderFlow out of the Dock and ⌘-Tab. Workflows keep running.
+- **Closing the window** (the red button or ⌘W) hides it and takes Vela out of the Dock and ⌘-Tab. Workflows keep running.
 - **The menu bar icon** is a folder with an arrow, or with a pause sign while paused, drawn as a template so it follows a light or dark menu bar. Its menu:
 
   | Line | Does |
   |---|---|
   | "2 running", "Nothing running", "Paused", or "Paused · 1 finishing" | Nothing; it says what the engine is doing |
   | "1 needs you", "3 need you" (only when some do) | Opens the window on Workflows, where Needs you is |
-  | Open FolderFlow | Shows the window and puts FolderFlow back in the Dock |
+  | Open Vela | Shows the window and puts Vela back in the Dock |
   | Pause all, or Resume while paused | Pause all |
-  | Quit FolderFlow (⌘Q) | Quits; see Failing, quitting, crashing |
+  | Quit Vela (⌘Q) | Quits; see Failing, quitting, crashing |
 
   It follows `activity-changed`, which the engine sends when the pause, the count of runs in progress or the count in Needs you changes.
-- **Opening FolderFlow again** from Finder or Spotlight while it's in the menu bar shows the window.
-- **Open at login** is the `openAtLogin` setting, on by default. Saving it adds or removes a login item (a LaunchAgent, through the autostart plugin), and each start makes the login item match the setting. Only FolderFlow.app does this; a development build would add its bare binary, so it leaves the login item alone. Opened at login, FolderFlow starts in the menu bar with no window.
+- **Opening Vela again** from Finder or Spotlight while it's in the menu bar shows the window.
+- **Open at login** is the `openAtLogin` setting, on by default. Saving it adds or removes a login item (a LaunchAgent, through the autostart plugin), and each start makes the login item match the setting. Only Vela.app does this; a development build would add its bare binary, so it leaves the login item alone. Opened at login, Vela starts in the menu bar with no window.
 
 ### Storage and retention
 
@@ -392,7 +392,7 @@ Each critical risk in `TESTING.md` gets its engine tests before the code that co
 | Leaking keys | Provider errors, run records, journals, logs and events never contain a known key string. |
 | Acting on bad data | The scripted fake model returns a wrong category, a missing detail, a malformed number or date, empty text, invalid JSON, a refusal, and a timeout: none reaches Rename, Move or Add row. Review pauses the run; fail ends it. |
 | Acting without consent | A run at Ask me does nothing until answered; answering twice gives `conflict`; the other answer's branch never runs. Review won't continue with a missing detail. |
-| Running away | Partial downloads, lock files, hidden files and links aren't taken. The same file isn't run twice, including after renaming it and after a restart. Files FolderFlow writes into any watched folder start nothing, including into the workflow's own folder, after undo, and after a crash mid-write. Files already there when a workflow is turned on aren't run. Schedule catches up once, not per missed time. |
+| Running away | Partial downloads, lock files, hidden files and links aren't taken. The same file isn't run twice, including after renaming it and after a restart. Files Vela writes into any watched folder start nothing, including into the workflow's own folder, after undo, and after a crash mid-write. Files already there when a workflow is turned on aren't run. Schedule catches up once, not per missed time. |
 
 Also: the runner against every template (with the fake model) to check each one runs end to end; variables at run time match `availableAt`; one api behaviour suite for the mock and the real engine, as for workflows today.
 

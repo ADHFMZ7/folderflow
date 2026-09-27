@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-const KEY = "folderflow.sidebar";
+const KEY = "vela.sidebar";
 
 // A preference of this window, not an app setting, so it lives in local storage.
 // Storage can be unavailable; then the sidebar simply starts open.

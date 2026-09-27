@@ -65,7 +65,7 @@ export interface Api {
   answer(runId: string, branchId: string): Promise<Run>;
   /** Runs a failed run again from the step that failed. */
   retryRun(runId: string): Promise<Run>;
-  /** Carries on a run cut off by FolderFlow quitting; a step that was cut off runs again. */
+  /** Carries on a run cut off by Vela quitting; a step that was cut off runs again. */
   resumeRun(runId: string): Promise<Run>;
   /** Reverses the run's file changes, newest first; files changed since are left alone and listed. */
   undoRun(runId: string): Promise<UndoResult>;

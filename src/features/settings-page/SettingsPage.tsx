@@ -20,7 +20,7 @@ export function SettingsPage() {
           <Segmented label="Appearance" value={settings.appearance} onChange={(appearance) => update({ appearance })}
             options={[{ value: "system", label: "Match system" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
         </div>
-        <Toggle label="Open FolderFlow when I log in" checked={settings.openAtLogin} onChange={(openAtLogin) => update({ openAtLogin })} />
+        <Toggle label="Open Vela when I log in" checked={settings.openAtLogin} onChange={(openAtLogin) => update({ openAtLogin })} />
       </section>
     </div>
   );

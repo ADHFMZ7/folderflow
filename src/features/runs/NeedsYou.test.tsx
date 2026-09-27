@@ -26,7 +26,7 @@ describe("needs you", () => {
     const { runId } = await runOf(api, "Sort", FAILS, "~/Downloads/a.pdf", "failed");
 
     const item = within(await needsYou()).getByRole("article", { name: "Sort: a.pdf" });
-    expect(item).toHaveTextContent("Sort it: Classify steps can't run in this version of FolderFlow yet.");
+    expect(item).toHaveTextContent("Sort it: Classify steps can't run in this version of Vela yet.");
     await user.click(within(item).getByRole("button", { name: "Undo run" }));
 
     expect(await screen.findByText("Put back 1 change.")).toBeInTheDocument();

@@ -32,8 +32,8 @@ export function FirstLaunch() {
           {name === "background" && (
             <>
               <h2 id="setup-title">Keep workflows running</h2>
-              <p className={styles.lead}>Workflows run while FolderFlow is open. When you close the window it keeps running in the menu bar.</p>
-              <Toggle label="Open FolderFlow when I log in" checked={settings.openAtLogin} onChange={(openAtLogin) => update({ openAtLogin })} />
+              <p className={styles.lead}>Workflows run while Vela is open. When you close the window it keeps running in the menu bar.</p>
+              <Toggle label="Open Vela when I log in" checked={settings.openAtLogin} onChange={(openAtLogin) => update({ openAtLogin })} />
             </>
           )}
         </div>
@@ -56,8 +56,8 @@ function Welcome() {
   return (
     <>
       <div className={styles.icon} aria-hidden>⤓</div>
-      <h1 id="setup-title">Welcome to FolderFlow</h1>
-      <p className={styles.lead}>Decide once what should happen to your files. FolderFlow does it every time a file arrives.</p>
+      <h1 id="setup-title">Welcome to Vela</h1>
+      <p className={styles.lead}>Decide once what should happen to your files. Vela does it every time a file arrives.</p>
       <ul className={styles.points}>
         <li><strong>Pick a folder</strong><span>Downloads, Desktop, anywhere you choose</span></li>
         <li><strong>Build the steps</strong><span>Drag steps onto a canvas, or describe them in words</span></li>

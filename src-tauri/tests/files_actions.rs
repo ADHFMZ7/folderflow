@@ -8,7 +8,7 @@ mod common;
 use std::fs;
 use std::os::unix::fs::symlink;
 
-use folderflow_lib::engine::files::{self, sys, CrashPoint};
+use vela_lib::engine::files::{self, sys, CrashPoint};
 
 use common::files::{names, place};
 
@@ -240,7 +240,7 @@ fn a_spreadsheet_that_is_a_link_is_refused() {
 
     assert_eq!(
         err.to_string(),
-        "link.csv is a link, so FolderFlow won't change it."
+        "link.csv is a link, so Vela won't change it."
     );
     assert_eq!(fs::read_to_string(real).unwrap(), "A\n");
 }
@@ -395,7 +395,7 @@ fn undo_puts_every_action_back_newest_first() {
     assert_eq!(p.tree(), before);
     assert!(report.left_alone.is_empty(), "{:?}", report.left_alone);
     assert_eq!(report.restored, 7);
-    // Files FolderFlow made went to the Trash, not away.
+    // Files Vela made went to the Trash, not away.
     assert_eq!(names(&p.trash.0).len(), 3);
 }
 

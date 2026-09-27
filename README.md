@@ -1,7 +1,7 @@
-# FolderFlow
+# Vela
 
 A macOS app for automations that use agents. Choose a folder, describe what
-should happen to each file added to it, and FolderFlow runs an agent on every
+should happen to each file added to it, and Vela runs an agent on every
 new file.
 
 ## Layout
@@ -30,12 +30,12 @@ cd src-tauri && cargo test   # the core's tests
 ```
 
 Notifications from a development build: macOS shows them only for an app it
-knows, and `tauri dev` runs a bare binary that borrows FolderFlow's bundle id.
+knows, and `tauri dev` runs a bare binary that borrows Vela's bundle id.
 Build the app once and open it, and they appear from then on:
 
 ```sh
 npm run tauri build -- --debug --bundles app
-open src-tauri/target/debug/bundle/macos/FolderFlow.app   # then quit it
+open src-tauri/target/debug/bundle/macos/Vela.app   # then quit it
 ```
 
 Until then, a Notify step's run says why nothing was shown.

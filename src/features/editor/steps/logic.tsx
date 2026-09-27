@@ -92,7 +92,7 @@ export function AskMeForm({ step, onChange }: FormProps<"askMe">) {
     <>
       <VariableText label="Question" field="question" value={step.question} onChange={(question) => onChange({ ...step, question })}
         preview={step.question.trim() ? fillSample(step.question, available) : null}
-        hint="The run waits here until you answer in FolderFlow." />
+        hint="The run waits here until you answer in Vela." />
       <fieldset className={styles.section}>
         <legend className={styles.sectionTitle}>Answers</legend>
         <ListRows<Branch> items={step.answers} noun="answer" addLabel="Add an answer" min={2} keyOf={(a) => a.id}

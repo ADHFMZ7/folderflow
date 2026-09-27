@@ -11,10 +11,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::workflows::{Entry, WorkflowError, WorkflowStore};
-use folderflow_lib::workflow::templates::build;
-use folderflow_lib::workflow::Workflow;
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::workflows::{Entry, WorkflowError, WorkflowStore};
+use vela_lib::workflow::templates::build;
+use vela_lib::workflow::Workflow;
 
 const ID: &str = "0f8c2b1e-6b0a-4c1e-9d6a-2f1f6c0f7a11";
 

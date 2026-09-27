@@ -265,8 +265,8 @@ impl Run {
             RunStatus::Interrupted if !self.dismissed => {
                 let at = self.steps.last().map(|s| s.title.clone());
                 let message = match &at {
-                    Some(step) => format!("Stopped at {step} when FolderFlow quit."),
-                    None => "FolderFlow quit before this run started.".into(),
+                    Some(step) => format!("Stopped at {step} when Vela quit."),
+                    None => "Vela quit before this run started.".into(),
                 };
                 (NeedsYouKind::Interrupted, at, message, Vec::new())
             }

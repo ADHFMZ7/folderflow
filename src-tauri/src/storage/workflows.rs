@@ -28,7 +28,7 @@ pub enum Entry {
     Ok(Workflow),
     /// Unreadable. Left exactly as it is.
     Damaged,
-    /// Written by a newer FolderFlow. Left exactly as it is.
+    /// Written by a newer Vela. Left exactly as it is.
     TooNew(u32),
 }
 
@@ -38,7 +38,7 @@ pub enum WorkflowError {
     InvalidId,
     #[error("no workflow with that id")]
     NotFound,
-    #[error("the workflow file is from a newer version of FolderFlow (format {found})")]
+    #[error("the workflow file is from a newer version of Vela (format {found})")]
     TooNew { found: u32 },
     /// A link or a folder where the workflow file should be. Never followed.
     #[error("the workflow's file is a link or a folder")]

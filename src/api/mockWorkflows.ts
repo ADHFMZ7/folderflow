@@ -185,7 +185,7 @@ export function roughValidate(wf: Workflow): Problem[] {
   return problems;
 }
 
-/** Sample workflows for previews: `folderflow.mock.workflows = "sample"`, each with its past runs. */
+/** Sample workflows for previews: `vela.mock.workflows = "sample"`, each with its past runs. */
 export function sampleWorkflows(): { workflow: Workflow; runs: Run[] }[] {
   const receipts = { ...templateWorkflow("invoices")!, name: "Receipts and invoices", enabled: true };
   const screenshots = { ...templateWorkflow("screenshots")!, enabled: true };

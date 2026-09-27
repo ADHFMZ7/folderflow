@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use folderflow_lib::engine::content::{self, LIMIT};
+use vela_lib::engine::content::{self, LIMIT};
 
 fn sample(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -113,7 +113,7 @@ fn anything_else_gives_no_text_and_says_why() {
         let name = path.file_name().unwrap().to_string_lossy();
         assert_eq!(
             read.note(&name).unwrap(),
-            format!("FolderFlow couldn't read any text in {name}, so the model was given only its name.")
+            format!("Vela couldn't read any text in {name}, so the model was given only its name.")
         );
     }
 }

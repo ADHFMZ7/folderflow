@@ -6,7 +6,7 @@ use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::thread;
 
-use folderflow_lib::storage::atomic::write_atomic;
+use vela_lib::storage::atomic::write_atomic;
 
 #[test]
 fn replaces_the_whole_file() {

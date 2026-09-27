@@ -418,7 +418,7 @@ fn check_values(step: &Step, out: &mut Problems) {
 }
 
 /// Folder and file paths: full, never climbing out with `..`, and never naming a
-/// folder FolderFlow doesn't work in (docs/engine.md, "Granted folders").
+/// folder Vela doesn't work in (docs/engine.md, "Granted folders").
 fn check_paths(step: &Step, out: &mut Problems) {
     let (field, path, is_file) = match &step.kind {
         StepKind::FileAdded { folder, .. } => ("folder", folder, false),

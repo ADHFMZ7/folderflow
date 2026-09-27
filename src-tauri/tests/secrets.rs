@@ -1,6 +1,6 @@
 //! A key can't leak through printing, serialising or another account.
 
-use folderflow_lib::storage::secrets::{KeychainStore, MemorySecretStore, Secret, SecretStore};
+use vela_lib::storage::secrets::{KeychainStore, MemorySecretStore, Secret, SecretStore};
 
 static_assertions::assert_not_impl_any!(Secret: serde::Serialize, std::fmt::Display, Clone);
 
@@ -48,7 +48,7 @@ fn deleting_an_account_without_a_key_is_fine() {
 #[test]
 #[ignore = "uses the real macOS Keychain"]
 fn the_keychain_stores_reads_and_deletes_a_key() {
-    let service = format!("com.adhfmz7.folderflow.test-{}", uuid::Uuid::new_v4());
+    let service = format!("com.adhfmz7.vela.test-{}", uuid::Uuid::new_v4());
     let store = KeychainStore::new(service);
 
     store.set("conn-1", &Secret::new(KEY)).unwrap();

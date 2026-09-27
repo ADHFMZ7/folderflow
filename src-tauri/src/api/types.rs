@@ -223,7 +223,7 @@ pub enum WorkflowStatus {
     Ok,
     /// The file can't be read. It is kept as it is.
     Damaged,
-    /// Written by a newer FolderFlow.
+    /// Written by a newer Vela.
     TooNew,
 }
 
@@ -274,7 +274,7 @@ impl From<SettingsError> for ApiError {
         match e {
             SettingsError::TooNew { .. } => Self::new(
                 ErrorCode::TooNew,
-                "Your settings were saved by a newer version of FolderFlow. Update FolderFlow to use them.",
+                "Your settings were saved by a newer version of Vela. Update Vela to use them.",
             ),
             SettingsError::Io(e) => Self::new(
                 ErrorCode::Io,
@@ -315,11 +315,11 @@ impl From<WorkflowError> for ApiError {
             }
             WorkflowError::TooNew { .. } => Self::new(
                 ErrorCode::TooNew,
-                "This workflow was saved by a newer version of FolderFlow. Update FolderFlow to use it.",
+                "This workflow was saved by a newer version of Vela. Update Vela to use it.",
             ),
             WorkflowError::NotAFile => Self::new(
                 ErrorCode::Invalid,
-                "This workflow's file is a link or a folder, so FolderFlow won't open it.",
+                "This workflow's file is a link or a folder, so Vela won't open it.",
             ),
             WorkflowError::Damaged => Self::new(
                 ErrorCode::Io,

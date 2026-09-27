@@ -350,7 +350,7 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
             })
         }
         other => Err(format!(
-            "{} steps can't run in this version of FolderFlow yet.",
+            "{} steps can't run in this version of Vela yet.",
             display_name(other)
         )),
     }

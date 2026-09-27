@@ -89,7 +89,7 @@ export type WorkflowSummary = {
   /** How many of its runs wait on the person. */
   needsYou: number;
   kindsNeeded: ModelKindId[];
-  /** "damaged": the file can't be read and is kept as is. "tooNew": written by a newer FolderFlow. */
+  /** "damaged": the file can't be read and is kept as is. "tooNew": written by a newer Vela. */
   status: "ok" | "damaged" | "tooNew";
   /** Whether there are changes waiting in a draft, not live yet. See "Drafts" in docs/workflow-format.md. */
   hasDraft: boolean;

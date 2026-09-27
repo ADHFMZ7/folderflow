@@ -10,11 +10,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Barrier};
 use std::thread;
 
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::storage::workflows::{Entry, WorkflowError, WorkflowStore};
-use folderflow_lib::workflow::templates::{blank, build};
-use folderflow_lib::workflow::{ProblemCode, StepKind, Workflow};
 use serde_json::json;
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::storage::workflows::{Entry, WorkflowError, WorkflowStore};
+use vela_lib::workflow::templates::{blank, build};
+use vela_lib::workflow::{ProblemCode, StepKind, Workflow};
 
 const ID: &str = "0f8c2b1e-6b0a-4c1e-9d6a-2f1f6c0f7a11";
 
@@ -307,10 +307,10 @@ fn saving_bumps_the_revision_and_returns_problems() {
 
     let mut changed = created.clone();
     changed.name = "Renamed".into();
-    changed.steps.push(folderflow_lib::workflow::Step {
+    changed.steps.push(vela_lib::workflow::Step {
         id: "n".into(),
         title: "Tell me".into(),
-        position: folderflow_lib::workflow::Position { x: 0.0, y: 160.0 },
+        position: vela_lib::workflow::Position { x: 0.0, y: 160.0 },
         kind: StepKind::Notify {
             message: "{nope}".into(),
             next: None,

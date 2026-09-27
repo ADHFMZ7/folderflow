@@ -10,7 +10,7 @@ async function toModelStep(user: ReturnType<typeof renderApp>["user"]) {
 describe("first launch", () => {
   it("can be skipped, and then the home warns that no models are set up", async () => {
     const { user, api } = renderApp();
-    expect(await screen.findByRole("heading", { name: "Welcome to FolderFlow" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome to Vela" })).toBeInTheDocument();
     await toModelStep(user);
 
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
@@ -80,7 +80,7 @@ describe("first launch", () => {
     await user.type(screen.getByLabelText("API key"), "sk-live-1234567890abcdef");
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(await screen.findByText("Anthropic sent an answer FolderFlow couldn't read. Try again later.")).toBeInTheDocument();
+    expect(await screen.findByText("Anthropic sent an answer Vela couldn't read. Try again later.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
@@ -89,7 +89,7 @@ describe("first launch", () => {
     await toModelStep(user);
     await user.click(screen.getByRole("button", { name: /^Ollama/ }));
 
-    expect(await screen.findByText("Ollama sent an answer FolderFlow couldn't read. Try again later.")).toBeInTheDocument();
+    expect(await screen.findByText("Ollama sent an answer Vela couldn't read. Try again later.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
   });
 

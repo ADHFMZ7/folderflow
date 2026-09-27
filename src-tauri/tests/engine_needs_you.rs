@@ -7,11 +7,11 @@ mod common;
 
 use std::fs;
 
-use folderflow_lib::api::types::ErrorCode;
-use folderflow_lib::engine::runs::{NeedsYouKind, RunStatus, RunStore, StepOutcome};
-use folderflow_lib::storage::data_dir::DataDir;
-use folderflow_lib::workflow::Workflow;
 use serde_json::{json, Value};
+use vela_lib::api::types::ErrorCode;
+use vela_lib::engine::runs::{NeedsYouKind, RunStatus, RunStore, StepOutcome};
+use vela_lib::storage::data_dir::DataDir;
+use vela_lib::workflow::Workflow;
 
 use common::engine::{engine, EngineHarness};
 use common::files::names;
@@ -247,7 +247,7 @@ async fn an_interrupted_run_resumes_where_it_stopped() {
     let mut h = h.restart();
     let needs = h.engine.list_needs_you().unwrap();
     assert_eq!(needs[0].kind, NeedsYouKind::Interrupted);
-    assert_eq!(needs[0].message, "Stopped at r when FolderFlow quit.");
+    assert_eq!(needs[0].message, "Stopped at r when Vela quit.");
 
     h.engine.resume_run(&id).unwrap();
     let run = h.until(&id, RunStatus::Done).await;

@@ -28,7 +28,7 @@ impl Text {
     pub fn note(&self, name: &str) -> Option<String> {
         if self.text.trim().is_empty() {
             Some(format!(
-                "FolderFlow couldn't read any text in {name}, so the model was given only its name."
+                "Vela couldn't read any text in {name}, so the model was given only its name."
             ))
         } else if self.cut {
             Some(format!(

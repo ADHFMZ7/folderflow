@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 
-use folderflow_lib::api::catalog;
-use folderflow_lib::workflow::templates::{blank, build};
-use folderflow_lib::workflow::{
+use vela_lib::api::catalog;
+use vela_lib::workflow::templates::{blank, build};
+use vela_lib::workflow::{
     validate, Every, FieldType, MoveMode, Op, ProblemCode, Step, StepKind, Workflow,
 };
 
@@ -86,7 +86,7 @@ fn watches(step: &Step, dir: &str, ext: &str) {
     assert!(!subfolders);
 }
 
-fn field_names(fields: &[folderflow_lib::workflow::Field]) -> Vec<(&str, FieldType)> {
+fn field_names(fields: &[vela_lib::workflow::Field]) -> Vec<(&str, FieldType)> {
     fields.iter().map(|f| (f.name.as_str(), f.kind)).collect()
 }
 

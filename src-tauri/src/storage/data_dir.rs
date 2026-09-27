@@ -18,6 +18,16 @@ impl DataDir {
         Ok(Self { root })
     }
 
+    /// Opens the folder as `open` does, first moving `old` there if the
+    /// folder doesn't exist yet: the data folder of an earlier bundle id.
+    pub fn open_moving(root: impl Into<PathBuf>, old: &Path) -> io::Result<Self> {
+        let root = root.into();
+        if !root.exists() && old.is_dir() {
+            fs::rename(old, &root)?;
+        }
+        Self::open(root)
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }

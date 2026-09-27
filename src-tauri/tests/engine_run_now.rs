@@ -5,9 +5,9 @@ mod common;
 
 use std::fs;
 
-use folderflow_lib::api::types::ErrorCode;
-use folderflow_lib::engine::runs::{RunQuery, RunStatus, StepOutcome, TriggerKind, ValueKind};
 use serde_json::{json, Value};
+use vela_lib::api::types::ErrorCode;
+use vela_lib::engine::runs::{RunQuery, RunStatus, StepOutcome, TriggerKind, ValueKind};
 
 use common::engine::{engine, engine_with, EngineHarness, Notes};
 
@@ -24,7 +24,7 @@ fn steps(steps: Value) -> Value {
 }
 
 /// Run now → If {file} starts with "Screenshot" → yes: Notify.
-fn screenshot_check(h: &EngineHarness) -> folderflow_lib::workflow::Workflow {
+fn screenshot_check(h: &EngineHarness) -> vela_lib::workflow::Workflow {
     h.workflow(
         "Spot screenshots",
         steps(json!([
@@ -395,14 +395,14 @@ async fn a_step_the_engine_cant_run_yet_fails_the_run_and_says_so() {
     assert_eq!(error.step_id.as_deref(), Some("q"));
     assert_eq!(
         error.message,
-        "Write steps can't run in this version of FolderFlow yet."
+        "Write steps can't run in this version of Vela yet."
     );
     // The failure is announced; the Notify after it never ran.
     assert_eq!(
         h.notes.shown.lock().unwrap().clone(),
         [(
             "Asks".to_string(),
-            "Sum up first failed on a.txt: Write steps can't run in this version of FolderFlow yet."
+            "Sum up first failed on a.txt: Write steps can't run in this version of Vela yet."
                 .to_string()
         )]
     );
@@ -424,7 +424,7 @@ async fn a_refused_notification_doesnt_fail_the_run() {
     assert_eq!(notify.outcome, StepOutcome::Done);
     assert_eq!(
         notify.message.as_deref(),
-        Some("The notification wasn't shown: Notifications are off for FolderFlow")
+        Some("The notification wasn't shown: Notifications are off for Vela")
     );
 }
 

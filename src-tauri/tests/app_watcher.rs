@@ -3,9 +3,9 @@
 
 use std::time::Duration;
 
-use folderflow_lib::engine::app::AppWatcher;
-use folderflow_lib::engine::Watcher;
 use tokio::sync::mpsc;
+use vela_lib::engine::app::AppWatcher;
+use vela_lib::engine::Watcher;
 
 #[tokio::test]
 async fn it_tells_of_changes_in_watched_folders_only() {

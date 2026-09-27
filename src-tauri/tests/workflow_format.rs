@@ -1,11 +1,11 @@
 //! The workflow file format (docs/workflow-format.md): exact field names and
 //! tagged shapes, so files on disk and the front end agree with the core.
 
-use folderflow_lib::workflow::{
+use serde_json::{json, Value};
+use vela_lib::workflow::{
     Branch, Condition, Every, Op, Position, Problem, ProblemCode, SaveResult, Schedule, Step,
     StepKind, Workflow,
 };
-use serde_json::{json, Value};
 
 /// Every step type exactly as the contract writes it.
 fn every_step_type() -> Vec<Value> {
@@ -320,8 +320,8 @@ fn a_file_without_a_version_is_read_as_the_current_version() {
 /// fails if `cargo test` changes anything there.)
 #[test]
 fn the_generated_typescript_is_up_to_date() {
-    use folderflow_lib::api::types::{ErrorCode, WorkflowStatus, WorkflowSummary};
     use ts_rs::{Config, TS};
+    use vela_lib::api::types::{ErrorCode, WorkflowStatus, WorkflowSummary};
 
     fn check<T: TS + 'static>(cfg: &Config) {
         let path = cfg.out_dir().join(T::output_path().unwrap());
@@ -339,14 +339,14 @@ fn the_generated_typescript_is_up_to_date() {
     check::<Workflow>(&cfg);
     check::<Step>(&cfg);
     check::<Branch>(&cfg);
-    check::<folderflow_lib::workflow::Category>(&cfg);
+    check::<vela_lib::workflow::Category>(&cfg);
     check::<Position>(&cfg);
     check::<Schedule>(&cfg);
     check::<Every>(&cfg);
-    check::<folderflow_lib::workflow::Field>(&cfg);
-    check::<folderflow_lib::workflow::FieldType>(&cfg);
-    check::<folderflow_lib::workflow::IfMissing>(&cfg);
-    check::<folderflow_lib::workflow::MoveMode>(&cfg);
+    check::<vela_lib::workflow::Field>(&cfg);
+    check::<vela_lib::workflow::FieldType>(&cfg);
+    check::<vela_lib::workflow::IfMissing>(&cfg);
+    check::<vela_lib::workflow::MoveMode>(&cfg);
     check::<Condition>(&cfg);
     check::<Op>(&cfg);
     check::<Problem>(&cfg);
