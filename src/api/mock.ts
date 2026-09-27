@@ -151,6 +151,7 @@ export function createMockApi(options: MockOptions = {}): Api {
 
   const listeners = new Set<(change: RunChanged) => void>();
   const announce = (run: Run) => {
+    activityChanged();
     for (const listener of [...listeners]) listener({ runId: run.id, workflowId: run.workflowId, status: run.status });
   };
 
@@ -171,7 +172,20 @@ export function createMockApi(options: MockOptions = {}): Api {
     noticesChanged();
   };
   let paused = false;
-  const activity = (): Activity => ({ paused, running: runRecords.filter((r) => r.status === "queued" || r.status === "running").length });
+  const activity = (): Activity => ({
+    paused,
+    running: runRecords.filter((r) => r.status === "queued" || r.status === "running").length,
+    needsYou: runRecords.filter((r) => needsYouOf(r) !== null).length,
+  });
+  // Like the core, told only when something in it changed.
+  const activityListeners = new Set<(activity: Activity) => void>();
+  let told = activity();
+  function activityChanged() {
+    const now = activity();
+    if (now.paused === told.paused && now.running === told.running && now.needsYou === told.needsYou) return;
+    told = now;
+    for (const listener of [...activityListeners]) listener(now);
+  }
   // Like the core, a workflow's runs go one at a time, in order.
   let queue = Promise.resolve();
   const later = () => new Promise((r) => setTimeout(r, delayMs));
@@ -439,7 +453,16 @@ export function createMockApi(options: MockOptions = {}): Api {
     async getActivity() { return activity(); },
     async pauseAll(pause) {
       paused = pause;
+      activityChanged();
       return activity();
+    },
+    onActivityChanged(listener) {
+      activityListeners.add(listener);
+      return () => void activityListeners.delete(listener);
+    },
+    // There is no menu bar here to ask for a page.
+    onNavigate() {
+      return () => {};
     },
 
     async getWorkflow(id) { return stored(id); },

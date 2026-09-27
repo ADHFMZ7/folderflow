@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5.
+How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, and 9.
 
 ## Summary
 
@@ -42,7 +42,7 @@ The engine is a set of modules in `src-tauri/src/engine/`, each with one job. On
 | `models` | Calls providers for Classify, Extract, Write and Agent steps, and checks what comes back. |
 | `runs` | Stores runs, the Needs you list, and history retention. |
 
-**Lifetime.** The engine starts in Tauri's `setup`, on Tauri's async runtime. Closing the window hides it; the app stays in the menu bar (decision 3). Quitting stops intake and schedules and marks running runs interrupted.
+**Lifetime.** The engine starts in Tauri's `setup`, on Tauri's async runtime. Closing the window hides it; the app stays in the menu bar (decision 3, and Background). Quitting calls `Engine::stop`: see Failing, quitting, crashing.
 
 **The running version only.** The engine reads a workflow's file, never its draft. The api layer tells it after `save_workflow`, `apply_draft`, `delete_workflow` and turning a workflow on or off, through a channel. It never re-reads files on a timer.
 
@@ -147,6 +147,8 @@ Runs of one workflow go one at a time, in the order their files arrived, so two 
 ### Failing, quitting, crashing
 
 A failed step ends the run as failed and sends a notification (decision 4). Actions already made stay made. Retry runs again from the failed step with the same values.
+
+Quitting stops watching and schedules, and nothing new starts; files that arrive afterwards aren't recorded, so the next start runs them. Runs still in the queue are marked interrupted at once. A run in progress stops after the step it is on, as interrupted, and resumes with the next one. Quitting waits up to two seconds for that; a run still going after that (a long copy, say) is marked interrupted as it stands, and the journal settles its last action at the next start.
 
 A run found `queued` or `running` at start-up was cut off (decision 5). The journal says whether its last file action finished (see File safety). The run is marked interrupted and waits in Needs you. A waiting run stays waiting across restarts.
 
@@ -311,9 +313,28 @@ The title bar shows runs in progress: a spinner and "2 running". Hovered, it tur
 - Scheduled times that pass while paused are skipped, not run later.
 - Runs already queued or running finish, and Run now still works: the person asked for it.
 
-Paused, the title bar shows an amber "Paused · Resume", and the Workflows page a banner saying what pausing does. The pause is kept in `engine/paused`, so it survives a restart. This is the Pause all the menu bar gets in pull request 9.
+Paused, the title bar shows an amber "Paused · Resume", and the Workflows page a banner saying what pausing does. The pause is kept in `engine/paused`, so it survives a restart. The menu bar's Pause all is the same pause, and the `activity-changed` event keeps the two in step.
 
 Next to the bell, a sun or moon switches between light and dark: the same setting as Settings › Appearance, starting from what the Mac shows when that is set to System.
+
+### Background
+
+FolderFlow keeps running with its window closed (decision 3). This lives in `src-tauri/src/background.rs`, outside the engine.
+
+- **Closing the window** (the red button or ⌘W) hides it and takes FolderFlow out of the Dock and ⌘-Tab. Workflows keep running.
+- **The menu bar icon** is a folder with an arrow, or with a pause sign while paused, drawn as a template so it follows a light or dark menu bar. Its menu:
+
+  | Line | Does |
+  |---|---|
+  | "2 running", "Nothing running", "Paused", or "Paused · 1 finishing" | Nothing; it says what the engine is doing |
+  | "1 needs you", "3 need you" (only when some do) | Opens the window on Workflows, where Needs you is |
+  | Open FolderFlow | Shows the window and puts FolderFlow back in the Dock |
+  | Pause all, or Resume while paused | Pause all |
+  | Quit FolderFlow (⌘Q) | Quits; see Failing, quitting, crashing |
+
+  It follows `activity-changed`, which the engine sends when the pause, the count of runs in progress or the count in Needs you changes.
+- **Opening FolderFlow again** from Finder or Spotlight while it's in the menu bar shows the window.
+- **Open at login** is the `openAtLogin` setting, on by default. Saving it adds or removes a login item (a LaunchAgent, through the autostart plugin), and each start makes the login item match the setting. Only FolderFlow.app does this; a development build would add its bare binary, so it leaves the login item alone. Opened at login, FolderFlow starts in the menu bar with no window.
 
 ### Storage and retention
 
@@ -347,7 +368,7 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 | `chooseFiles(start?)` | `choose_files` | `string[]`, with `~` for the home folder (empty when cancelled) |
 | `runNow(workflowId, files)` | `run_now` | `RunSummary[]`, queued |
 | `tryOnFile(workflow, file)` | `try_on_file` | `TryResult`; progress arrives as `try-step` events |
-| `pauseAll(paused)` | `pause_all` | `Activity`: `{ paused, running }` |
+| `pauseAll(paused)` | `pause_all` | `Activity`: `{ paused, running, needsYou }` |
 | `getActivity()` | `get_activity` | `Activity` |
 | `listNotices()` | `list_notices` | `Notice[]`, newest first |
 | `markNoticesRead(ids?)` | `mark_notices_read` | nothing; all of them when `ids` is left out |
@@ -355,7 +376,7 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 
 Turning a workflow on stays a save with `enabled: true`; the engine hears of it from the command. Later, with the screen that offers to run on them, the result gains `alreadyThere: number`, the files recorded as seen without running.
 
-**Events:** `run-changed` `{ runId, workflowId, status }`, and `notices-changed` with the unread count. Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
+**Events:** `run-changed` `{ runId, workflowId, status }`, `notices-changed` with the unread count, `activity-changed` with the `Activity` (`onActivityChanged`), and `navigate` with a page's `#/…` address when the menu bar opens one (`onNavigate`). Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
 
 **Errors:** runs use the existing codes. `not_found` is an unknown run, `conflict` is answering a run that isn't waiting (answered in another window, or undone), and `invalid` is an answer that isn't one of the step's branches.
 
@@ -379,7 +400,7 @@ Model quality (does a real model pick the right category?) is the separate eval 
 
 ## Build order
 
-Nine pull requests, each usable on its own and each test-first. File safety comes before anything that moves a real file, and model calls come after the steps that don't need them work end to end.
+Nine pull requests, each usable on its own and each test-first. File safety comes before anything that moves a real file, and model calls come after the steps that don't need them work end to end. Pull requests 9 and 8 come before 6 and 7, so a first release can ship the workflows without AI steps; the numbers stay as they were.
 
 | # | Pull request | Done when |
 |---|---|---|
@@ -388,9 +409,9 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 | 3 ✓ | Intake and schedules: watching, the seen record, own writes, catching up | The running-away tests pass; the Screenshots template works on a real folder |
 | 4 ✓ | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
 | 5 ✓ | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
+| 9 ✓ | Background: menu bar, Pause all, Open at login (the autostart plugin) | Workflows keep running with the window closed, and after a restart |
+| 8 | Try on a file | The Try button works in the editor, and nothing on disk changes |
 | 6 | `models`: Classify, Extract and Write, answer checking, review, errors (closes #8), decision 1 | The bad-data and wrong-place tests pass with the fake model; Sort receipts runs on Ollama |
 | 7 | Agent steps | The contract part of Paperwork inbox runs |
-| 8 | Try on a file | The Try button works in the editor, and nothing on disk changes |
-| 9 | Background: menu bar, Pause all, Open at login (the autostart plugin) | Workflows keep running with the window closed, and after a restart |
 
 Pull request 1 added only the modules it needed (`engine`, `runs`, `runner`, `values`, and `app` for the app's notifications, events and Trash); pull request 2 added `files`. Each later one adds its own.

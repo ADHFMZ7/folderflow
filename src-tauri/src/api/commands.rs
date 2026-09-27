@@ -29,10 +29,16 @@ pub async fn get_settings(backend: State<'_, AppBackend>) -> Result<LoadedSettin
 
 #[tauri::command]
 pub async fn update_settings(
+    app: tauri::AppHandle,
     backend: State<'_, AppBackend>,
     change: SettingsChange,
 ) -> Result<Settings, ApiError> {
-    backend.update_settings(change)
+    let login = change.open_at_login.is_some();
+    let settings = backend.update_settings(change)?;
+    if login {
+        crate::background::open_at_login(&app, settings.open_at_login);
+    }
+    Ok(settings)
 }
 
 #[tauri::command]

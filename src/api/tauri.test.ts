@@ -72,6 +72,22 @@ describe("tauri api", () => {
     expect(heard).toEqual([{ runId: "r1", workflowId: "w1", status: "done" }]);
   });
 
+  it("hears the activity and the menu bar's requests for a page", async () => {
+    mockIPC(() => null, { shouldMockEvents: true });
+    const activity: unknown[] = [];
+    const pages: unknown[] = [];
+    createTauriApi().onActivityChanged((a) => activity.push(a));
+    createTauriApi().onNavigate((hash) => pages.push(hash));
+    await new Promise((r) => setTimeout(r, 0));
+    const { emit } = await import("@tauri-apps/api/event");
+
+    await emit("activity-changed", { paused: true, running: 1, needsYou: 2 });
+    await emit("navigate", "#/workflows");
+
+    expect(activity).toEqual([{ paused: true, running: 1, needsYou: 2 }]);
+    expect(pages).toEqual(["#/workflows"]);
+  });
+
   it("returns what the command returns", async () => {
     recordCalls({ settings: { setupComplete: true }, notice: null });
     await expect(createTauriApi().getSettings()).resolves.toEqual({ settings: { setupComplete: true }, notice: null });

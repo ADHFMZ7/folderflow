@@ -61,6 +61,9 @@ pub trait EngineEvents: Send + Sync {
     fn run_changed(&self, change: RunChanged);
     /// The notification list changed; `unread` is how many are unread now.
     fn notices_changed(&self, _unread: u32) {}
+    /// Pause all, the count of runs in progress, or the count waiting on the
+    /// person changed.
+    fn activity_changed(&self, _activity: Activity) {}
 }
 
 /// Watches folders, and tells the engine of changes in them through
@@ -70,14 +73,15 @@ pub trait Watcher: Send + Sync {
     fn watch(&self, folders: &[(PathBuf, bool)]);
 }
 
-/// What the title bar shows: whether workflows are paused, and how many runs
-/// are queued or running.
+/// What the title bar and the menu bar show: whether workflows are paused,
+/// how many runs are queued or running, and how many are in Needs you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Activity {
     pub paused: bool,
     pub running: u32,
+    pub needs_you: u32,
 }
 
 /// The `run-changed` event.
@@ -121,6 +125,9 @@ const DEFAULT_LIMIT: u32 = 100;
 /// How many runs of each workflow the history keeps (decision 7).
 pub const KEEP_RUNS: usize = 1000;
 
+/// How often `stop` looks whether the runs in progress have stopped.
+const STOP_POLL: Duration = Duration::from_millis(20);
+
 /// The longest the schedule clock sleeps, so waking from sleep or a change
 /// of time zone is noticed within a minute.
 const SCHEDULE_NAP: Duration = Duration::from_secs(60);
@@ -150,6 +157,8 @@ struct Inner {
     /// Pause all: no new runs from folders or schedules. Kept in `paused_path`.
     paused: AtomicBool,
     paused_path: PathBuf,
+    /// The app is quitting: nothing new starts, and runs stop between steps.
+    stopping: AtomicBool,
     /// One queue per workflow, so its runs go one at a time, in order.
     queues: Mutex<HashMap<String, mpsc::UnboundedSender<String>>>,
 }
@@ -182,6 +191,7 @@ impl Engine {
             notices,
             paused: AtomicBool::new(engine_dir.join("paused").exists()),
             paused_path: engine_dir.join("paused"),
+            stopping: AtomicBool::new(false),
             queues: Mutex::new(HashMap::new()),
         };
         for mut run in inner.runs.all()? {
@@ -232,6 +242,9 @@ impl Engine {
     pub fn reload(&self, workflow_id: &str) {
         let inner = &self.inner;
         let _reloading = inner.reloading();
+        if inner.is_stopping() {
+            return;
+        }
         let carrying_on = inner.turn_on_or_off(workflow_id) == Some(false);
         inner.ports.watcher.watch(&inner.intake.folders());
         if carrying_on {
@@ -370,10 +383,7 @@ impl Engine {
     }
 
     pub fn activity(&self) -> Activity {
-        Activity {
-            paused: self.inner.is_paused(),
-            running: lock(&self.inner.index).busy.len() as u32,
-        }
+        self.inner.activity(&lock(&self.inner.index))
     }
 
     /// Pause all: while paused, new files wait and scheduled times are passed
@@ -392,13 +402,55 @@ impl Engine {
             }
         };
         saved.map_err(|e| ApiError::new(ErrorCode::Io, format!("Couldn't save the pause: {e}")))?;
-        let was = inner.paused.swap(paused, Ordering::SeqCst);
+        let was = {
+            let index = lock(&inner.index);
+            let was = inner.paused.swap(paused, Ordering::SeqCst);
+            if was != paused {
+                inner.ports.events.activity_changed(inner.activity(&index));
+            }
+            was
+        };
         if was && !paused {
             let folders: Vec<PathBuf> =
                 inner.intake.folders().into_iter().map(|(f, _)| f).collect();
             self.folders_changed(&folders);
         }
         Ok(self.activity())
+    }
+
+    /// Stops for the app quitting (decision 3): folders are no longer
+    /// watched, schedules no longer fire, and nothing new starts. Runs still
+    /// in the queue are marked interrupted at once. Runs in progress stop
+    /// after the step they are on; any still going after `wait` are marked
+    /// interrupted as they stand, and the next start settles their journals.
+    /// Files that arrive from now on aren't recorded, so the next start runs them.
+    pub fn stop(&self, wait: Duration) {
+        let inner = &self.inner;
+        {
+            let _reloading = inner.reloading();
+            inner.stopping.store(true, Ordering::SeqCst);
+            inner.ports.watcher.watch(&[]);
+        }
+        let busy: Vec<String> = lock(&inner.index).busy.iter().cloned().collect();
+        for id in busy {
+            if let Ok(Some(run)) = inner.runs.get(&id) {
+                if run.status == RunStatus::Queued {
+                    inner.interrupt(run);
+                }
+            }
+        }
+        let until = std::time::Instant::now() + wait;
+        while !lock(&inner.index).busy.is_empty() && std::time::Instant::now() < until {
+            std::thread::sleep(STOP_POLL);
+        }
+        let left: Vec<String> = lock(&inner.index).busy.iter().cloned().collect();
+        for id in left {
+            if let Ok(Some(run)) = inner.runs.get(&id) {
+                if matches!(run.status, RunStatus::Queued | RunStatus::Running) {
+                    inner.interrupt(run);
+                }
+            }
+        }
     }
 
     /// Everything waiting on the person, newest first.
@@ -650,7 +702,7 @@ impl Inner {
     /// Queues a run for each new file in a watched workflow's folder. While
     /// paused, the files wait: they aren't recorded, so resuming takes them.
     fn take(this: &Arc<Self>, id: &str) {
-        if this.is_paused() {
+        if this.is_paused() || this.is_stopping() {
             return;
         }
         let files = match this.intake.take(id) {
@@ -678,7 +730,28 @@ impl Inner {
         self.paused.load(Ordering::SeqCst)
     }
 
+    fn is_stopping(&self) -> bool {
+        self.stopping.load(Ordering::SeqCst)
+    }
+
+    fn activity(&self, index: &Index) -> Activity {
+        Activity {
+            paused: self.is_paused(),
+            running: index.busy.len() as u32,
+            needs_you: index.needs.len() as u32,
+        }
+    }
+
+    fn interrupt(&self, mut run: Run) {
+        run.status = RunStatus::Interrupted;
+        self.save(&run);
+        self.announce(&run);
+    }
+
     fn check_schedules(self: &Arc<Self>) {
+        if self.is_stopping() {
+            return;
+        }
         let now = self.ports.clock.now().with_timezone(&Local);
         let due = match lock(&self.schedules).due(&now) {
             Ok(due) => due,
@@ -740,7 +813,16 @@ impl Inner {
     }
 
     fn announce(&self, run: &Run) {
-        lock(&self.index).note(run);
+        {
+            // Told under the lock, so the last told is the latest.
+            let mut index = lock(&self.index);
+            let before = self.activity(&index);
+            index.note(run);
+            let after = self.activity(&index);
+            if after != before {
+                self.ports.events.activity_changed(after);
+            }
+        }
         self.ports.events.run_changed(RunChanged {
             run_id: run.id.clone(),
             workflow_id: run.workflow_id.clone(),
@@ -763,7 +845,7 @@ impl Inner {
         let Ok(Some(mut run)) = self.runs.get(run_id) else {
             return;
         };
-        if run.status != RunStatus::Queued {
+        if run.status != RunStatus::Queued || self.is_stopping() {
             return;
         }
         run.status = RunStatus::Running;
@@ -783,6 +865,7 @@ impl Inner {
                     home: &self.home,
                     ports: &self.ports,
                     notices: &self.notices,
+                    stopping: &self.stopping,
                     files,
                 };
                 runner::run(&mut run, &mut ctx, |r| self.save(r)).await
@@ -804,6 +887,9 @@ impl Inner {
                         self.ports.now(),
                     );
                 }
+            }
+            Ok(runner::Ended::Interrupted) => {
+                run.status = RunStatus::Interrupted;
             }
             Ok(runner::Ended::Done) => {
                 run.ended_at = Some(self.ports.now());

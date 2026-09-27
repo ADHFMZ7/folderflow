@@ -1,13 +1,15 @@
 pub mod api;
+mod background;
 pub mod engine;
 pub mod storage;
 pub mod workflow;
 
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent, WindowEvent};
+use tauri_plugin_autostart::MacosLauncher;
 
-use api::commands;
+use api::commands::{self, AppBackend};
 use api::providers::HttpProviders;
 use api::Backend;
 use engine::app::{forward_changes, AppEvents, AppNotifier, AppTrash, AppWatcher};
@@ -20,6 +22,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec![background::AT_LOGIN]),
+        ))
         .setup(|app| {
             let dir = DataDir::open(app.path().app_data_dir()?)?;
             // Keys go in the Keychain under the bundle id, com.adhfmz7.folderflow.
@@ -43,7 +49,28 @@ pub fn run() {
             });
             app.manage(engine);
             app.manage(Backend::new(dir, secrets, HttpProviders::default()));
+
+            background::install(app)?;
+            match app.state::<AppBackend>().get_settings() {
+                Ok(loaded) => {
+                    background::open_at_login(app.handle(), loaded.settings.open_at_login)
+                }
+                Err(e) => eprintln!("folderflow: {}", e.message),
+            }
+            // Opened at login, FolderFlow starts in the menu bar alone.
+            if background::opened_at_login() {
+                app.set_dock_visibility(false);
+            } else {
+                background::show_window(app.handle());
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing hides: workflows keep running (decision 3).
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                background::hide_window(window);
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
@@ -83,6 +110,15 @@ pub fn run() {
             commands::get_activity,
             commands::pause_all,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| match event {
+            // Opened again from Finder or Spotlight while in the menu bar.
+            RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } => background::show_window(app),
+            RunEvent::Exit => app.state::<Engine>().stop(background::QUIT_WAIT),
+            _ => {}
+        });
 }
