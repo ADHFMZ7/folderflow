@@ -390,7 +390,7 @@ fn undo_puts_every_action_back_newest_first() {
         .unwrap();
     assert_ne!(p.tree(), before);
 
-    let report = files::undo(&p.journal, RUN, &p.trash).unwrap();
+    let report = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert_eq!(p.tree(), before);
     assert!(report.left_alone.is_empty(), "{:?}", report.left_alone);
@@ -411,7 +411,7 @@ fn undo_leaves_alone_a_file_changed_since_and_says_so() {
 
     fs::write(&moved, "v2, edited by the person").unwrap();
     fs::write(&made, "edited too").unwrap();
-    let report = files::undo(&p.journal, RUN, &p.trash).unwrap();
+    let report = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert_eq!(
         fs::read_to_string(&moved).unwrap(),
@@ -442,7 +442,7 @@ fn undo_brings_a_file_back_under_a_new_number_if_its_old_name_was_taken() {
     files.rename(&f, "Receipt").unwrap();
     p.file("Downloads/Scan.pdf", "someone else's");
 
-    files::undo(&p.journal, RUN, &p.trash).unwrap();
+    files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert_eq!(
         fs::read_to_string(p.at("Downloads/Scan.pdf")).unwrap(),
@@ -462,7 +462,7 @@ fn undo_keeps_a_row_when_the_spreadsheet_was_edited_since() {
     files.add_row(&csv, &["2".into()], None).unwrap();
     fs::write(&csv, "A\n1\n2\n3 typed by the person\n").unwrap();
 
-    let report = files::undo(&p.journal, RUN, &p.trash).unwrap();
+    let report = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert_eq!(
         fs::read_to_string(&csv).unwrap(),
@@ -484,7 +484,7 @@ fn undo_removes_only_the_tags_the_run_added() {
     // Tagged by the person after the run, with a tag the run also added.
     sys::add_tags(&f, &["Keep".into()]).unwrap();
 
-    files::undo(&p.journal, RUN, &p.trash).unwrap();
+    files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert_eq!(sys::tags(&f).unwrap(), ["Keep"]);
 }
@@ -496,8 +496,8 @@ fn undoing_twice_changes_nothing_more() {
     let mut files = p.files(RUN, &[("Downloads", false)]);
     files.rename(&f, "b").unwrap();
 
-    let first = files::undo(&p.journal, RUN, &p.trash).unwrap();
-    let second = files::undo(&p.journal, RUN, &p.trash).unwrap();
+    let first = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
+    let second = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert_eq!((first.restored, second.restored), (1, 0));
     assert_eq!(names(&p.at("Downloads")), ["a.pdf"]);
@@ -570,7 +570,7 @@ fn crash_each_action_at(point: CrashPoint) {
             );
         }
 
-        files::undo(&p.journal, RUN, &p.trash).unwrap();
+        files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
         assert_eq!(
             p.tree(),
             before,

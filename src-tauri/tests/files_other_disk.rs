@@ -80,7 +80,7 @@ fn a_move_to_another_disk_copies_first_and_undo_brings_it_back() {
         "no temporary file left"
     );
 
-    let report = files::undo(&p.journal, RUN, &p.trash).unwrap();
+    let report = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
     assert!(report.left_alone.is_empty(), "{:?}", report.left_alone);
     assert_eq!(p.tree(), before);

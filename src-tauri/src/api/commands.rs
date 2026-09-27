@@ -103,14 +103,23 @@ pub async fn create_workflow(
 #[tauri::command]
 pub async fn save_workflow(
     backend: State<'_, AppBackend>,
+    engine: State<'_, Engine>,
     workflow: Workflow,
 ) -> Result<SaveResult, ApiError> {
-    backend.save_workflow(workflow)
+    let saved = backend.save_workflow(workflow)?;
+    engine.reload(&saved.workflow.id);
+    Ok(saved)
 }
 
 #[tauri::command]
-pub async fn delete_workflow(backend: State<'_, AppBackend>, id: String) -> Result<(), ApiError> {
-    backend.delete_workflow(&id)
+pub async fn delete_workflow(
+    backend: State<'_, AppBackend>,
+    engine: State<'_, Engine>,
+    id: String,
+) -> Result<(), ApiError> {
+    backend.delete_workflow(&id)?;
+    engine.reload(&id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -132,9 +141,12 @@ pub async fn save_draft(
 #[tauri::command]
 pub async fn apply_draft(
     backend: State<'_, AppBackend>,
+    engine: State<'_, Engine>,
     id: String,
 ) -> Result<SaveResult, ApiError> {
-    backend.apply_draft(&id)
+    let applied = backend.apply_draft(&id)?;
+    engine.reload(&id);
+    Ok(applied)
 }
 
 #[tauri::command]

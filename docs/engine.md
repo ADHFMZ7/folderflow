@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 and 2.
+How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 3.
 
 ## Summary
 
@@ -24,6 +24,7 @@ It must hold the critical risks in `TESTING.md`: no lost files, nothing outside 
 | 6 | File steps after a Schedule trigger | Refused by validation for now (`needs_file`). A later version can give Schedule a folder to go through. | A scheduled run has no file to rename or move. |
 | 7 | How long history is kept | The last 1,000 runs per workflow. Runs waiting for you, and their undo records, are never removed. | Enough to undo last month's mistakes; small on disk. |
 | 8 | Workflows triggering each other | Never. Files FolderFlow writes don't start any workflow, not only their own. | Chains are a feature for later; loops are a disaster now. |
+| 9 | Waiting for a file to finish being written | Don't. A file is taken as soon as a scan finds it; names browsers use while downloading are skipped. | File added is for downloads and files dragged in. Browsers download under a temporary name and rename when done, and a drag on the same disk is one rename. Waiting would add seconds to every run for a case these don't have. |
 
 ## Shape
 
@@ -32,7 +33,7 @@ The engine is a set of modules in `src-tauri/src/engine/`, each with one job. On
 | Module | Job |
 |---|---|
 | `engine` | Starts and stops everything. Holds the running workflows, reloads one when it's saved, applied, turned on or off, or deleted. Sends events to the window. |
-| `intake` | Notices new files: folder watching, waiting until a file is complete, the record of files already seen. |
+| `intake` | Notices new files: which files count, and the record of files already seen. Folder watching itself is the `Watcher` port (FSEvents in `app.rs`). |
 | `schedule` | Wakes up scheduled workflows at their time. |
 | `runner` | Runs one run: follows the steps, fills in `{variables}`, calls the step, records the result. |
 | `steps` | What each step type does, one function per type. |
@@ -45,7 +46,7 @@ The engine is a set of modules in `src-tauri/src/engine/`, each with one job. On
 
 **The running version only.** The engine reads a workflow's file, never its draft. The api layer tells it after `save_workflow`, `apply_draft`, `delete_workflow` and turning a workflow on or off, through a channel. It never re-reads files on a timer.
 
-**Fakes for tests.** The boundaries sit behind traits in `engine/mod.rs` (`Clock`, `Notifier`, `EngineEvents`, and later the model client and folder-change events). Everything else is tested for real, in temporary folders: see `src-tauri/tests/engine_*.rs` and `tests/common/engine.rs`.
+**Fakes for tests.** The boundaries sit behind traits in `engine/mod.rs` (`Clock`, `Notifier`, `EngineEvents`, `Trash`, `Watcher`, and later the model client). Tests tell the engine of folder changes themselves (`Engine::folders_changed`); `tests/app_watcher.rs` checks the real FSEvents watcher. Everything else is tested for real, in temporary folders: see `src-tauri/tests/engine_*.rs` and `tests/common/engine.rs`.
 
 **Talking to the window.** New commands (see Api additions), plus two Tauri events: `run-changed` and `needs-you-changed`. The mock api implements both (`src/api/mockRuns.ts` runs the same steps the core can), so screens are built and tested against it.
 
@@ -55,21 +56,23 @@ A file runs a workflow once, when it is complete, and never because FolderFlow i
 
 ### File added
 
-1. **Watch.** The `notify` crate (FSEvents on macOS) watches the trigger folder, and its subfolders when `subfolders` is on.
-2. **Scan.** After an event, wait one second for more, then list the folder. A candidate is a regular file whose extension matches `fileTypes`. Skipped: folders (including packages like `.pages`), symlinks, hidden files, `.DS_Store`, partial downloads (`.download`, `.crdownload`, `.part`, `.tmp`), Office lock files (`~$…`), and iCloud files that aren't downloaded yet.
-3. **Wait until complete.** A candidate is taken when its size and modification time haven't changed for 2 seconds and it opens for reading. A file still being written is checked again on the next scan.
-4. **Once only.** Each workflow keeps a record of the files it has seen: device, inode, size, modification time and path, in `engine/seen/<workflow id>.jsonl`. A file whose inode is already there is skipped, even after it is renamed. A file copied in is a new file (new inode). The record survives edits to the workflow and restarts.
-5. **Queue a run.** One run per file.
+1. **Watch.** The `notify` crate (FSEvents on macOS) watches the trigger folder, and its subfolders when `subfolders` is on. The engine tells the watcher the full set of folders whenever a workflow is turned on or off.
+2. **Scan.** After an event, wait one second for more, then list every watched folder the changed paths touch. A candidate is a regular file whose extension matches `fileTypes` (any case). Skipped: folders (with subfolders on, folders are looked inside, but not packages like `.pages` or `.app`), links, hidden files (a leading dot, or hidden in Finder), partial downloads (`.download`, `.crdownload`, `.part`, `.tmp`), Office lock files (`~$…`), and iCloud files that aren't downloaded yet.
+3. **Take it.** No waiting for the file to stop changing (decision 9). A large file copied in from another disk appears under its own name while it's still copying; Rename, Move and Tag still act on the right file, and steps that read its contents (pull requests 5 and 6) may need a check then.
+4. **Once only.** Each workflow keeps a record of the files it has seen: device, inode, size, modification time and path, in `engine/seen/<workflow id>.jsonl`. A file whose device and inode are already there is skipped, even after it is renamed. A file copied in is a new file (new inode). A file is recorded before its run is queued, so a crash can lose a run but never repeat one. The record survives edits to the workflow and restarts, and is removed when the workflow is deleted.
+5. **Queue a run.** One run per file, oldest first (by the time it landed in the folder), of the workflow as saved.
 
-**Turning on.** When a workflow is turned on, every file already in its folder is recorded as seen without running (decision 2). Files that arrive while it is off are treated the same way when it's turned on again.
+**Turning on.** When a workflow is turned on, every file already in its folder is recorded as seen without running (decision 2). Files that arrive while it is off are treated the same way when it's turned on again, and so are the files in a new folder, or of newly chosen types, when the trigger is changed. The record notes what was watched from when, so the engine can tell these apart from a restart. (The count of files left alone, for "Also run on the 14 files already there", comes later with the screen that offers it.)
 
-**While the app was quit.** On start, each folder is scanned once. Files that arrived in the meantime and aren't in the record are run, in the order they were added.
+**While the app was quit.** On start, each watched folder is scanned once. Files that arrived in the meantime and aren't in the record are run, oldest first.
 
-**FolderFlow's own files.** Before any write, `files` registers the path it is about to create. Events for that path are dropped, and the file is recorded as seen for every workflow watching that folder (decision 8).
+**FolderFlow's own files.** Before any action puts a file somewhere (rename, move, copy, create file, add row, and undo putting one back), `files` tells intake the path. A scan passes over that path until the action is over, and then the file is recorded as seen for every workflow watching that folder (decision 8). If the app crashes in between, the journal's recovery at the next start names the path, and it is recorded then, before any folder is scanned.
 
 ### Schedule
 
-The next time is worked out in the Mac's local time zone, so daylight saving changes are handled. If the Mac was asleep or FolderFlow was quit at that time, the workflow runs once when it's back, as long as that is within 12 hours. It never runs more than once to catch up.
+The next time is worked out in the Mac's local time zone, so daylight saving changes are handled: a time the clocks skip runs when they land (2:30 on the spring-forward night runs at 3:00), and a time that happens twice runs the first time. If the Mac was asleep or FolderFlow was quit at that time, the workflow runs once when it's back, as long as that is within 12 hours. It never runs more than once to catch up. Turning a schedule on, or changing its time, doesn't run for times already past.
+
+`engine/schedules.json` keeps, for each scheduled workflow that's on, the time up to which it has been checked, so a restart neither misses nor repeats a time. The engine checks at each due time, and at least once a minute to notice waking from sleep. A scheduled run gives `{date}` and `{year}`.
 
 ### Run now
 
@@ -309,7 +312,7 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 | `tryOnFile(workflow, file)` | `try_on_file` | `TryResult`; progress arrives as `try-step` events |
 | `pauseAll(paused)` | `pause_all` | nothing |
 
-Turning a workflow on stays a save with `enabled: true`. The result gains `alreadyThere: number`, the files recorded as seen without running.
+Turning a workflow on stays a save with `enabled: true`; the engine hears of it from the command. Later, with the screen that offers to run on them, the result gains `alreadyThere: number`, the files recorded as seen without running.
 
 **Events:** `run-changed` `{ runId, workflowId, status }` and `needs-you-changed` `{ count }`. Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening.
 
@@ -327,7 +330,7 @@ Each critical risk in `TESTING.md` gets its engine tests before the code that co
 | Leaking keys | Provider errors, run records, journals, logs and events never contain a known key string. |
 | Acting on bad data | The scripted fake model returns a wrong category, a missing detail, a malformed number or date, empty text, invalid JSON, a refusal, and a timeout: none reaches Rename, Move or Add row. Review pauses the run; fail ends it. |
 | Acting without consent | A run at Ask me does nothing until answered; answering twice gives `conflict`; the other answer's branch never runs. Review won't continue with a missing detail. |
-| Running away | A file being written (growing over time) isn't taken until still. The same file isn't run twice, including after renaming it and after a restart. Files FolderFlow writes into any watched folder start nothing. Files already there when a workflow is turned on aren't run. Schedule catches up once, not per missed time. |
+| Running away | Partial downloads, lock files, hidden files and links aren't taken. The same file isn't run twice, including after renaming it and after a restart. Files FolderFlow writes into any watched folder start nothing, including into the workflow's own folder, after undo, and after a crash mid-write. Files already there when a workflow is turned on aren't run. Schedule catches up once, not per missed time. |
 
 Also: the runner against every template (with the fake model) to check each one runs end to end; variables at run time match `availableAt`; one api behaviour suite for the mock and the real engine, as for workflows today.
 
@@ -341,7 +344,7 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 |---|---|---|
 | 1 ✓ | Engine skeleton: delete `engine/`, add the modules, run records, the runner with If, Stop and Notify, and Run now | A Run now workflow of If and Notify runs, and its run can be read back |
 | 2 ✓ | `files`: granted folders, the six actions, the journal, crash reconciling, undo | The file-safety and outside-the-folder tests pass, property test included |
-| 3 | Intake and schedules: watching, waiting until complete, the seen record, own writes, catching up | The running-away tests pass; the Screenshots template works on a real folder |
+| 3 ✓ | Intake and schedules: watching, the seen record, own writes, catching up | The running-away tests pass; the Screenshots template works on a real folder |
 | 4 | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
 | 5 | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
 | 6 | `models`: Classify, Extract and Write, answer checking, review, errors (closes #8), decision 1 | The bad-data and wrong-place tests pass with the fake model; Sort receipts runs on Ollama |

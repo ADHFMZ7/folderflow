@@ -97,7 +97,7 @@ proptest! {
             }
         }
 
-        let report = files::undo(&p.journal, RUN, &p.trash).unwrap();
+        let report = files::undo(&p.journal, RUN, &p.trash, &files::NoWrites).unwrap();
 
         prop_assert!(report.left_alone.is_empty(), "{:?}", report.left_alone);
         prop_assert_eq!(p.tree(), before);

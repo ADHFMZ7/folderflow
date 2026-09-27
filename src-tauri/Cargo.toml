@@ -29,12 +29,13 @@ ts-rs = "12.0.1"
 reqwest = { version = "0.13.5", features = ["json"] }
 tauri-plugin-dialog = "2"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde"] }
-tokio = { version = "1.53.1", features = ["sync", "rt"] }
+tokio = { version = "1.53.1", features = ["sync", "rt", "time"] }
 mac-notification-sys = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSUserNotification", "NSString", "NSFileManager", "NSURL", "NSError"] }
 libc = "0.2"
 plist = "1"
+notify = "8"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -46,6 +47,7 @@ panic = "abort"
 strip = true
 
 [dev-dependencies]
+chrono-tz = "0.10"
 proptest = "1"
 static_assertions = "1.1.0"
 tempfile = "3.27.0"

@@ -52,6 +52,19 @@ pub enum Action {
     Tag { path: PathBuf, add: Vec<String> },
 }
 
+impl Action {
+    /// The file the action puts somewhere, if it puts one.
+    pub fn target(&self) -> Option<&Path> {
+        match self {
+            Action::Rename { to, .. } | Action::Move { to, .. } | Action::Copy { to, .. } => {
+                Some(to)
+            }
+            Action::Create { path, .. } | Action::AddRow { path, .. } => Some(path),
+            Action::MakeDir { .. } | Action::Tag { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 enum Line {
