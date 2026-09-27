@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, 8 and 9.
+How Vela runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, 8 and 9.
 
 ## Summary
 
@@ -321,7 +321,7 @@ Next to the bell, a sun or moon switches between light and dark: the same settin
 
 Vela keeps running with its window closed (decision 3). This lives in `src-tauri/src/background.rs`, outside the engine.
 
-- **Closing the window** (the red button or ⌘W) hides it and takes FolderFlow out of the Dock and ⌘-Tab. Workflows keep running.
+- **Closing the window** (the red button or ⌘W) hides it and takes Vela out of the Dock and ⌘-Tab. Workflows keep running.
 - **The menu bar icon** is the sailing boat: with a wake while runs are going, its sails lowered while paused, and a dot when something needs you (paused shows over running). Drawn as templates, so it follows a light or dark menu bar; the sources and `render.sh` are in `src-tauri/icons/tray/`. Its menu:
 
   | Line | Does |

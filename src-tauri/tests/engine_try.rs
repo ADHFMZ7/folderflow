@@ -9,12 +9,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use folderflow_lib::api::types::ErrorCode;
-use folderflow_lib::engine::files::sys;
-use folderflow_lib::engine::runs::{RunStatus, StepOutcome};
-use folderflow_lib::engine::TryResult;
-use folderflow_lib::workflow::Workflow;
 use serde_json::{json, Value};
+use vela_lib::api::types::ErrorCode;
+use vela_lib::engine::files::sys;
+use vela_lib::engine::runs::{RunStatus, StepOutcome};
+use vela_lib::engine::TryResult;
+use vela_lib::workflow::Workflow;
 
 use common::engine::{engine, EngineHarness};
 
@@ -191,10 +191,7 @@ async fn what_only_the_disk_can_show_stops_the_try_as_it_would_a_run() {
     assert_eq!(result.status, RunStatus::Failed);
     let error = result.error.unwrap();
     assert_eq!(error.step_id.as_deref(), Some("a"));
-    assert_eq!(
-        error.message,
-        "log.csv is a link, so FolderFlow won't change it."
-    );
+    assert_eq!(error.message, "log.csv is a link, so Vela won't change it.");
     assert_eq!(result.steps.len(), 2);
     assert_eq!(result.steps[1].outcome, StepOutcome::Failed);
 }
