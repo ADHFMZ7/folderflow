@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 3.
+How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 4.
 
 ## Summary
 
@@ -80,7 +80,7 @@ The person chooses **Run…** in the editor's toolbar and picks one or more file
 
 Before anything is queued, every file is checked: it must exist and be a regular file, not a folder or a link. If any file fails, none runs. A workflow with problems is refused ("Fix the problem with this workflow before running it."), as is a scheduled one. For Run now, `{dateAdded}` is the day the run was queued.
 
-Until a step type is built, a run that reaches it fails with "Rename steps can't run in this version of FolderFlow yet.", before touching anything.
+Until a step type is built, a run that reaches it fails with "Write steps can't run in this version of FolderFlow yet.", before touching anything.
 
 ## Runs
 
@@ -99,7 +99,10 @@ A run is one pass of one workflow over one file (or one scheduled moment). It ke
 | `startedAt`, `endedAt` | When it was queued, and when it became done, failed or undone (RFC 3339, the Mac's offset) |
 | `steps` | One entry per step reached: step id, title, type, times, outcome (`running`, `done`, `failed`), the branch taken, the values it produced, and a message. Later: the file actions it made (journal ids), the model used and whether content left the Mac |
 | `values` | Every `{variable}` so far, with its kind |
-| `waitingFor` | The question or review it is paused on |
+| `waitingFor` | The question it is paused on, with its `{variables}` filled in (later, a review too) |
+| `continueAt` | For a queued run carrying on after an answer, a retry or a resume: the step it starts from |
+| `dismissed` | A failed or interrupted run the person took off Needs you; it stays in the history and can still be undone |
+| `undo` | What Undo run put back and what it left alone |
 | `error` | `{ stepId, message }`, key-free, when it failed |
 
 ### States
@@ -145,9 +148,11 @@ Runs of one workflow go one at a time, in the order their files arrived, so two 
 
 A failed step ends the run as failed and sends a notification (decision 4). Actions already made stay made. Retry runs again from the failed step with the same values.
 
-A run found `queued` or `running` at start-up was cut off (decision 5). The journal says whether its last file action finished (see File safety). The run is marked interrupted and waits in Needs you.
+A run found `queued` or `running` at start-up was cut off (decision 5). The journal says whether its last file action finished (see File safety). The run is marked interrupted and waits in Needs you. A waiting run stays waiting across restarts.
 
-A paused or retried run first checks that its file is still where it left it, by inode. If not, it fails with "Scan_0042.pdf was moved or deleted while the run was waiting".
+Resume carries on from the step that was cut off, which runs again; a run cut off between two steps carries on with the next one. Running a cut-off Rename, Move or Tag again changes nothing more, but a Copy, Create file or Add row that had finished before the quit happens a second time. The person chose Resume, and Undo run takes both back.
+
+A run carrying on (after an answer, a retry or a resume) first checks that its file is still where it left it, by inode. If not, it fails with "Scan_0042.pdf was moved or deleted while the run was waiting."
 
 ## File safety
 
@@ -266,21 +271,23 @@ Every run is kept (decision 7), and anything that needs a person lands in one li
 | Item | Shows | Choices |
 |---|---|---|
 | Ask me | The question, with the file | One button per answer; the run continues down that branch |
-| Review | The details Extract or an Agent step found, as a form, with the missing or unreadable ones marked | Continue with the corrected details, or Stop the run |
+| Review (pull request 6) | The details Extract or an Agent step found, as a form, with the missing or unreadable ones marked | Continue with the corrected details, or Stop the run |
 | Failed run | The step, and the reason in plain words | Retry from that step, Undo run, or Dismiss |
 | Interrupted run | Where it stopped | Resume, Undo run, or Dismiss |
 
-The count on the Workflows page and in the sidebar is the number of these items. `WorkflowSummary.needsYou` and `lastRun` become real.
+Needs you is a section at the top of the Workflows page, shown while it has items; each item links to its run. The count in the sidebar and on each workflow's card is the number of these items: `WorkflowSummary.needsYou`. `WorkflowSummary.lastRun` is the workflow's newest run, as a `RunSummary`. The engine keeps both in memory, built from the run records at start, so listing workflows doesn't read every run.
+
+A question sends a notification with the question. Answering a run that isn't waiting (answered in another window, or undone) is `conflict`; an answer that isn't one of the step's is `invalid`. The answer is recorded on the Ask me step ("You answered Log it."), and the run goes back to the end of its workflow's line. An answer whose branch leads nowhere ends the run as done. The screens refresh on `run-changed`, since every change to Needs you is a change to a run; there is no separate event.
 
 ### History
 
-The History page lists runs newest first, filtered by workflow or state. A run opens to its steps in plain words: "Renamed Scan_0042.pdf to 2026-09-14 Blue Bottle 4.50.pdf", "Asked 'Log Acme 1,200?' You answered Log it". Each AI step says which model ran it and whether the file's text left the Mac. Undo run is at the top.
+The History page lists runs newest first, 50 at a time, filtered by workflow or state. A run opens (`#/history/<run id>`) to its steps in plain words: "Renamed Scan_0042.pdf to 2026-09-14 Blue Bottle 4.50.pdf", "You answered Log it.", and "Went the Yes way." for a branch. Undo run is at the top, after a confirmation, and the page then says what was put back and lists each file left alone with the reason. A run that needs the person offers the same choices there as in Needs you. Later: each AI step says which model ran it and whether the file's text left the Mac.
 
-The editor can open a workflow's recent runs and highlight the path a run took on the canvas.
+Later: the editor opens a workflow's recent runs and highlights the path a run took on the canvas; clicking a notification opens its run.
 
 ### Storage and retention
 
-Runs live in `runs/<workflow id>/<run id>.json`, with their journals, in the app's data folder. After each run, a workflow's runs beyond the newest 1,000 are removed along with their journals and backups. Runs that are waiting, failed or interrupted are never removed. Deleting a workflow moves its runs to the trash with it.
+Runs live in `runs/<workflow id>/<run id>.json`, with their journals, in the app's data folder. After each run that ends done, a workflow's runs beyond the newest 1,000 are removed along with their journals and backups (`RunStore::prune`, `files::forget`); only then are they read, so a workflow under the limit costs a directory count. Runs that are queued, running, waiting, failed or interrupted are never removed. Later: deleting a workflow moves its runs to the trash with it.
 
 ## Try on a file
 
@@ -301,12 +308,12 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 |---|---|---|
 | `listRuns(query?)`: `{ workflowId?, status?, before?, limit? }`; `before` is a run id, `limit` defaults to 100 | `list_runs` | `RunSummary[]`, newest first |
 | `getRun(id)` | `get_run` | `Run` |
-| `listNeedsYou()` | `list_needs_you` | `NeedsYouItem[]` |
+| `listNeedsYou()` | `list_needs_you` | `NeedsYouItem[]`: `{ kind: "question" \| "failed" \| "interrupted", run: RunSummary, step, message, answers }`, newest first |
 | `answer(runId, branchId)` | `answer` | `Run` |
 | `submitReview(runId, values)` | `submit_review` | `Run`, or `invalid` if a value still doesn't fit its kind |
 | `retryRun(runId)` / `resumeRun(runId)` | `retry_run` / `resume_run` | `Run` |
 | `undoRun(runId)` | `undo_run` | `{ run, restored, leftAlone: [{ path, reason }] }` |
-| `dismissRun(runId)` | `dismiss_run` | nothing |
+| `dismissRun(runId)` | `dismiss_run` | nothing; `conflict` unless the run is failed or interrupted |
 | `chooseFiles(start?)` | `choose_files` | `string[]`, with `~` for the home folder (empty when cancelled) |
 | `runNow(workflowId, files)` | `run_now` | `RunSummary[]`, queued |
 | `tryOnFile(workflow, file)` | `try_on_file` | `TryResult`; progress arrives as `try-step` events |
@@ -314,7 +321,7 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 
 Turning a workflow on stays a save with `enabled: true`; the engine hears of it from the command. Later, with the screen that offers to run on them, the result gains `alreadyThere: number`, the files recorded as seen without running.
 
-**Events:** `run-changed` `{ runId, workflowId, status }` and `needs-you-changed` `{ count }`. Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening.
+**Events:** `run-changed` `{ runId, workflowId, status }`. Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
 
 **Errors:** runs use the existing codes. `not_found` is an unknown run, `conflict` is answering a run that isn't waiting (answered in another window, or undone), and `invalid` is an answer that isn't one of the step's branches.
 
@@ -345,7 +352,7 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 | 1 ✓ | Engine skeleton: delete `engine/`, add the modules, run records, the runner with If, Stop and Notify, and Run now | A Run now workflow of If and Notify runs, and its run can be read back |
 | 2 ✓ | `files`: granted folders, the six actions, the journal, crash reconciling, undo | The file-safety and outside-the-folder tests pass, property test included |
 | 3 ✓ | Intake and schedules: watching, the seen record, own writes, catching up | The running-away tests pass; the Screenshots template works on a real folder |
-| 4 | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
+| 4 ✓ | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
 | 5 | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
 | 6 | `models`: Classify, Extract and Write, answer checking, review, errors (closes #8), decision 1 | The bad-data and wrong-place tests pass with the fake model; Sort receipts runs on Ollama |
 | 7 | Agent steps | The contract part of Paperwork inbox runs |

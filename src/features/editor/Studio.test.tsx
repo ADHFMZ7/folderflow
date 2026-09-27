@@ -372,13 +372,22 @@ describe("run now", () => {
   });
 
   it("counts the files, and says why a run failed", async () => {
-    const ask: Step = { id: "q", type: "askMe", title: "Ask first", position: { x: 0, y: 160 }, question: "File it?",
-      answers: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }], branches: {} };
-    await openWith([fileTrigger("q"), ask], "Ask first", { chosenFiles: ["~/Downloads/a.pdf", "~/Downloads/b.pdf"] });
+    const write: Step = { id: "q", type: "write", title: "Sum up first", position: { x: 0, y: 160 }, instruction: "Sum up", saveAs: "summary", next: null };
+    await openWith([fileTrigger("q"), write], "Sum up first", { chosenFiles: ["~/Downloads/a.pdf", "~/Downloads/b.pdf"] });
 
     run();
 
-    expect(await screen.findByText("Ran on 2 files, 2 failed: Ask me steps can't run in this version of FolderFlow yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Ran on 2 files, 2 failed: Write steps can't run in this version of FolderFlow yet.")).toBeInTheDocument();
+  });
+
+  it("says when the run is waiting for an answer", async () => {
+    const ask: Step = { id: "q", type: "askMe", title: "Ask first", position: { x: 0, y: 160 }, question: "File it?",
+      answers: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }], branches: {} };
+    await openWith([fileTrigger("q"), ask], "Ask first");
+
+    run();
+
+    expect(await screen.findByText("It's waiting for your answer in Needs you")).toBeInTheDocument();
   });
 
   it("runs nothing when the picker is cancelled", async () => {

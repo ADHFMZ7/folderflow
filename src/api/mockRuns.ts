@@ -2,7 +2,7 @@
 // (src-tauri/src/engine), for the steps the core can run so far. File steps
 // change nothing, since there are no files; they record what they would do.
 
-import type { ConditionOp, Run, RunValue, Step, StepRun, Workflow } from "./types";
+import type { ConditionOp, NeedsYouItem, Run, RunSummary, RunValue, Step, StepRun, Workflow } from "./types";
 
 const NAMES: Record<Step["type"], string> = {
   fileAdded: "File added", schedule: "Schedule", runNow: "Run now", classify: "Classify", extract: "Extract",
@@ -74,10 +74,45 @@ export function holds(left: string, op: ConditionOp, right: string): boolean {
   }
 }
 
-/** Runs `run` to the end, changing it in place. */
+export const summaryOf = (run: Run): RunSummary => ({
+  id: run.id, workflowId: run.workflowId, workflowName: run.workflow.name, status: run.status,
+  file: run.trigger.file?.path.split("/").pop() ?? null, startedAt: run.startedAt, endedAt: run.endedAt,
+  error: run.error?.message ?? null,
+});
+
+/** What the run waits on the person for, if anything, as the core words it. */
+export function needsYouOf(run: Run): NeedsYouItem | null {
+  const titleOf = (id: string | null | undefined) => [...run.steps].reverse().find((s) => s.stepId === id)?.title ?? null;
+  if (run.status === "waiting" && run.waitingFor) {
+    const q = run.waitingFor;
+    return { kind: "question", run: summaryOf(run), step: titleOf(q.stepId), message: q.question, answers: q.answers };
+  }
+  if (run.dismissed) return null;
+  if (run.status === "failed") {
+    return { kind: "failed", run: summaryOf(run), step: titleOf(run.error?.stepId), message: run.error?.message ?? "The run failed.", answers: [] };
+  }
+  if (run.status === "interrupted") {
+    const at = run.steps[run.steps.length - 1]?.title ?? null;
+    const message = at ? `Stopped at ${at} when FolderFlow quit.` : "FolderFlow quit before this run started.";
+    return { kind: "interrupted", run: summaryOf(run), step: at, message, answers: [] };
+  }
+  return null;
+}
+
+/** The step after `stepId`, given the branch it took. */
+export function after(workflow: Workflow, stepId: string, branch: string | null): string | null {
+  const step = workflow.steps.find((s) => s.id === stepId);
+  if (!step || step.type === "stop") return null;
+  if ("next" in step) return step.next;
+  return branch ? step.branches[branch] ?? null : null;
+}
+
+/** Runs `run` to its end or its next question, changing it in place. It starts
+    at `continueAt` when a run carries on, otherwise at the trigger. */
 export function execute(run: Run, workflow: Workflow, notify: (title: string, body: string) => void) {
   const now = () => new Date().toISOString();
-  let current = workflow.steps.find((s) => s.type === "fileAdded" || s.type === "runNow")?.id ?? null;
+  let current = run.continueAt ?? workflow.steps.find((s) => s.type === "fileAdded" || s.type === "runNow")?.id ?? null;
+  run.continueAt = null;
   while (current) {
     const step = workflow.steps.find((s) => s.id === current);
     if (!step) break;
@@ -107,6 +142,14 @@ export function execute(run: Run, workflow: Workflow, notify: (title: string, bo
         break;
       case "stop":
         break;
+      case "askMe": {
+        const question = fill(step.question, run.values);
+        entry.outcome = "waiting";
+        run.waitingFor = { stepId: step.id, question, answers: step.answers };
+        run.status = "waiting";
+        notify(workflow.name, question);
+        return;
+      }
       case "rename": {
         const to = `${folderOf(file)}/${fillName(step.template, run.values)}${extOf(nameOf(file))}`;
         entry.message = `Renamed ${nameOf(file)} to ${nameOf(to)}.`;

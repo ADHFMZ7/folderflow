@@ -18,6 +18,18 @@ function storage() {
 
 const api = (opts: Parameters<typeof createMockApi>[0] = {}) => createMockApi({ delayMs: 0, ...opts });
 
+/** Every run-changed event until `runId` reaches `status`. */
+function until(a: ReturnType<typeof api>, runId: string, status: RunStatus) {
+  const seen: RunStatus[] = [];
+  return new Promise<RunStatus[]>((resolve) => {
+    const stop = a.onRunChanged((change) => {
+      if (change.runId !== runId) return;
+      seen.push(change.status);
+      if (change.status === status) { stop(); resolve(seen); }
+    });
+  });
+}
+
 describe("getSettings", () => {
   it("starts fresh with no notice", async () => {
     const { settings, notice } = await api().getSettings();
@@ -339,17 +351,6 @@ describe("runs", () => {
     return (await a.saveWorkflow({ ...wf, name: "Spot screenshots", steps })).workflow;
   }
 
-  /** Every run-changed event until `runId` reaches `status`. */
-  function until(a: ReturnType<typeof api>, runId: string, status: RunStatus) {
-    const seen: RunStatus[] = [];
-    return new Promise<RunStatus[]>((resolve) => {
-      const stop = a.onRunChanged((change) => {
-        if (change.runId !== runId) return;
-        seen.push(change.status);
-        if (change.status === status) { stop(); resolve(seen); }
-      });
-    });
-  }
 
   it("runs a workflow on each chosen file and keeps the run", async () => {
     const a = api();
@@ -388,8 +389,7 @@ describe("runs", () => {
     const wf = await a.createWorkflow(null);
     const steps: Step[] = [
       { id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next: "q" },
-      { id: "q", type: "askMe", title: "Ask", position: { x: 0, y: 160 }, question: "File it?",
-        answers: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }], branches: {} },
+      { id: "q", type: "write", title: "Sum up", position: { x: 0, y: 160 }, instruction: "Sum up {file}", saveAs: "summary", next: null },
     ];
     const saved = (await a.saveWorkflow({ ...wf, steps })).workflow;
 
@@ -397,7 +397,7 @@ describe("runs", () => {
     await until(a, queued.id, "failed");
 
     const run = await a.getRun(queued.id);
-    expect(run.error).toEqual({ stepId: "q", message: "Ask me steps can't run in this version of FolderFlow yet." });
+    expect(run.error).toEqual({ stepId: "q", message: "Write steps can't run in this version of FolderFlow yet." });
     expect((await a.listRuns({ status: "failed" }))[0].error).toBe(run.error!.message);
   });
 
@@ -454,5 +454,32 @@ describe("runs", () => {
   it("answers the file picker with the chosen files", async () => {
     expect(await api({ chosenFiles: ["~/a.pdf", "~/b.pdf"] }).chooseFiles()).toEqual(["~/a.pdf", "~/b.pdf"]);
     expect(await api({ chosenFiles: [] }).chooseFiles()).toEqual([]);
+  });
+});
+
+describe("needs you", () => {
+  const askSteps: Step[] = [
+    { id: "t", type: "runNow", title: "Run now", position: { x: 0, y: 0 }, next: "q" },
+    { id: "q", type: "askMe", title: "Ask", position: { x: 0, y: 160 }, question: "File {file}?",
+      answers: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }], branches: { y: "s" } },
+    { id: "s", type: "stop", title: "Stop", position: { x: 0, y: 320 } },
+  ];
+
+  it("refuses an answer that isn't one of the question's, and a second answer, as the core does", async () => {
+    const a = api();
+    const wf = await a.createWorkflow(null);
+    const saved = (await a.saveWorkflow({ ...wf, steps: askSteps })).workflow;
+    const [queued] = await a.runNow(saved.id, ["~/a.txt"]);
+    await until(a, queued.id, "waiting");
+
+    expect(await a.listNeedsYou()).toMatchObject([{ kind: "question", message: "File a?", step: "Ask" }]);
+    await expect(a.answer(queued.id, "maybe")).rejects.toMatchObject({ code: "invalid" });
+    await a.answer(queued.id, "y");
+    await expect(a.answer(queued.id, "n")).rejects.toMatchObject({ code: "conflict" });
+    await until(a, queued.id, "done");
+    expect(await a.listNeedsYou()).toEqual([]);
+    await expect(a.dismissRun(queued.id)).rejects.toMatchObject({ code: "conflict" });
+    await expect(a.retryRun(queued.id)).rejects.toMatchObject({ code: "conflict" });
+    await expect(a.resumeRun(queued.id)).rejects.toMatchObject({ code: "conflict" });
   });
 });

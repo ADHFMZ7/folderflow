@@ -3,7 +3,8 @@
 
 import { PanelLeft } from "lucide-react";
 import { useRoute } from "../../app/routes";
-import { HistoryPage } from "../history/HistoryPage";
+import { HistoryPage } from "../runs/HistoryPage";
+import { RunPage } from "../runs/RunPage";
 import { SettingsPage } from "../settings-page/SettingsPage";
 import { TemplatesPage } from "../workflows/TemplatesPage";
 import { Studio } from "../editor/Studio";
@@ -32,7 +33,8 @@ export function MainWindow() {
           <PanelLeft size={17} strokeWidth={1.7} aria-hidden />
         </button>
       </header>
-      <Sidebar current={route.page === "workflow" ? "workflows" : route.page} needsYou={needsYou} collapsed={sidebar.collapsed} />
+      <Sidebar current={route.page === "workflow" ? "workflows" : route.page === "run" ? "history" : route.page}
+        needsYou={needsYou} collapsed={sidebar.collapsed} />
       <div className={styles.sheet}>
         {route.page === "workflow" ? (
           // The editor takes the whole sheet, with no page padding or scrolling of its own.
@@ -42,6 +44,7 @@ export function MainWindow() {
             <div className={styles.content}>
               {route.page === "workflows" && <WorkflowsPage {...workflows} />}
               {route.page === "history" && <HistoryPage />}
+              {route.page === "run" && <RunPage key={route.id} id={route.id} />}
               {route.page === "templates" && <TemplatesPage templates={workflows.templates} onUse={workflows.create} />}
               {route.page === "settings" && <SettingsPage />}
             </div>

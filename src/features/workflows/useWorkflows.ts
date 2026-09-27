@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useApi } from "../../api/api";
 import type { Template, WorkflowSummary } from "../../api/types";
 import { navigate } from "../../app/routes";
+import { useRunChanged } from "../runs/useRunChanged";
 
 /** Saved workflows and the template catalog, with the actions the home page offers. */
 export function useWorkflows() {
@@ -10,6 +11,8 @@ export function useWorkflows() {
   const [templates, setTemplates] = useState<Template[]>([]);
 
   const refresh = useCallback(async () => setWorkflows(await api.listWorkflows()), [api]);
+  // Last runs and Needs you counts change as runs do.
+  useRunChanged(() => { void refresh(); });
 
   useEffect(() => {
     let live = true;

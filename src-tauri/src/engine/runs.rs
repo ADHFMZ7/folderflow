@@ -13,7 +13,7 @@ use super::files::UndoReport;
 use crate::storage::atomic::write_atomic;
 use crate::storage::data_dir::DataDir;
 use crate::storage::workflows::is_workflow_id;
-use crate::workflow::Workflow;
+use crate::workflow::{Branch, Workflow};
 
 /// One pass of one workflow over one file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -44,6 +44,50 @@ pub struct Run {
     /// What undoing the run did, once it's undone.
     #[serde(default)]
     pub undo: Option<UndoReport>,
+    /// The question a waiting run is paused on.
+    #[serde(default)]
+    pub waiting_for: Option<Question>,
+    /// The step a queued run carries on from, after an answer, a retry or a
+    /// resume. `None` starts at the trigger.
+    #[serde(default)]
+    pub continue_at: Option<String>,
+    /// A failed or interrupted run the person put aside: out of Needs you.
+    #[serde(default)]
+    pub dismissed: bool,
+}
+
+/// What an Ask me step asks, with its `{variables}` filled in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Question {
+    pub step_id: String,
+    pub question: String,
+    pub answers: Vec<Branch>,
+}
+
+/// Something that waits on the person.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NeedsYouItem {
+    pub kind: NeedsYouKind,
+    pub run: RunSummary,
+    /// The title of the step it's about.
+    pub step: Option<String>,
+    /// The question, why the run failed, or where it stopped.
+    pub message: String,
+    /// For a question, one per button.
+    pub answers: Vec<Branch>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum NeedsYouKind {
+    Question,
+    Failed,
+    Interrupted,
 }
 
 /// What `undo_run` returns.
@@ -126,6 +170,8 @@ pub struct StepRun {
 #[ts(export)]
 pub enum StepOutcome {
     Running,
+    /// An Ask me step, waiting for the answer.
+    Waiting,
     Done,
     Failed,
 }
@@ -161,7 +207,7 @@ pub struct RunError {
 }
 
 /// A line in the run history.
-#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct RunSummary {
@@ -191,6 +237,50 @@ pub struct RunQuery {
 }
 
 impl Run {
+    /// What this run waits on the person for, if anything.
+    pub fn needs_you(&self) -> Option<NeedsYouItem> {
+        let step_title = |id: Option<&String>| {
+            id.and_then(|id| self.steps.iter().rev().find(|s| &s.step_id == id))
+                .map(|s| s.title.clone())
+        };
+        let (kind, step, message, answers) = match self.status {
+            RunStatus::Waiting => {
+                let q = self.waiting_for.as_ref()?;
+                (
+                    NeedsYouKind::Question,
+                    step_title(Some(&q.step_id)),
+                    q.question.clone(),
+                    q.answers.clone(),
+                )
+            }
+            RunStatus::Failed if !self.dismissed => {
+                let error = self.error.as_ref();
+                (
+                    NeedsYouKind::Failed,
+                    step_title(error.and_then(|e| e.step_id.as_ref())),
+                    error.map_or_else(|| "The run failed.".into(), |e| e.message.clone()),
+                    Vec::new(),
+                )
+            }
+            RunStatus::Interrupted if !self.dismissed => {
+                let at = self.steps.last().map(|s| s.title.clone());
+                let message = match &at {
+                    Some(step) => format!("Stopped at {step} when FolderFlow quit."),
+                    None => "FolderFlow quit before this run started.".into(),
+                };
+                (NeedsYouKind::Interrupted, at, message, Vec::new())
+            }
+            _ => return None,
+        };
+        Some(NeedsYouItem {
+            kind,
+            run: self.summary(),
+            step,
+            message,
+            answers,
+        })
+    }
+
     pub fn summary(&self) -> RunSummary {
         RunSummary {
             id: self.id.clone(),
@@ -254,6 +344,52 @@ impl RunStore {
             }
         }
         Ok(out)
+    }
+
+    /// Removes a workflow's oldest finished runs beyond the newest `keep`,
+    /// and hands each removed run's id to `removed`. Runs that are waiting,
+    /// failed or interrupted are kept, however old.
+    pub fn prune(
+        &self,
+        workflow_id: &str,
+        keep: usize,
+        mut removed: impl FnMut(&str),
+    ) -> io::Result<()> {
+        let dir = self.root.join(workflow_id);
+        let count = match fs::read_dir(&dir) {
+            Ok(listed) => listed.count(),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        // Cheap to count; read them all only when there's something to remove.
+        if count <= keep {
+            return Ok(());
+        }
+        let mut runs: Vec<Run> = fs::read_dir(&dir)?
+            .filter_map(|e| e.ok())
+            .filter_map(|e| read(&e.path()))
+            .collect();
+        runs.sort_by_cached_key(|r| {
+            std::cmp::Reverse((
+                chrono::DateTime::parse_from_rfc3339(&r.started_at).ok(),
+                r.id.clone(),
+            ))
+        });
+        for run in runs.iter().skip(keep) {
+            let kept = matches!(
+                run.status,
+                RunStatus::Queued
+                    | RunStatus::Running
+                    | RunStatus::Waiting
+                    | RunStatus::Failed
+                    | RunStatus::Interrupted
+            );
+            if !kept {
+                fs::remove_file(dir.join(format!("{}.json", run.id)))?;
+                removed(&run.id);
+            }
+        }
+        Ok(())
     }
 
     fn workflow_dirs(&self) -> io::Result<Vec<PathBuf>> {
