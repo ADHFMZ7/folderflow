@@ -81,11 +81,35 @@ pub fn status(activity: Activity) -> String {
     }
 }
 
-fn icon(activity: Activity) -> Image<'static> {
-    if activity.paused {
-        tauri::include_image!("icons/tray-paused.png")
+/// Which drawing the menu bar icon shows: the boat, with a wake while runs
+/// are going or its sails lowered while paused, and a dot when something
+/// needs you. Drawn in `icons/tray/`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Look {
+    Watching,
+    Running,
+    Paused,
+}
+
+pub fn look(activity: Activity) -> (Look, bool) {
+    let look = if activity.paused {
+        Look::Paused
+    } else if activity.running > 0 {
+        Look::Running
     } else {
-        tauri::include_image!("icons/tray.png")
+        Look::Watching
+    };
+    (look, activity.needs_you > 0)
+}
+
+fn icon(activity: Activity) -> Image<'static> {
+    match look(activity) {
+        (Look::Watching, false) => tauri::include_image!("icons/tray/watching.png"),
+        (Look::Watching, true) => tauri::include_image!("icons/tray/watching-needs-you.png"),
+        (Look::Running, false) => tauri::include_image!("icons/tray/running.png"),
+        (Look::Running, true) => tauri::include_image!("icons/tray/running-needs-you.png"),
+        (Look::Paused, false) => tauri::include_image!("icons/tray/paused.png"),
+        (Look::Paused, true) => tauri::include_image!("icons/tray/paused-needs-you.png"),
     }
 }
 
@@ -261,6 +285,15 @@ mod tests {
         assert!(menu.contains(&"Resume".to_string()));
         assert!(!menu.contains(&"Pause all".to_string()));
         assert_eq!(read(activity(true, 1, 0))[0], "(Paused · 1 finishing)");
+    }
+
+    #[test]
+    fn the_icon_shows_the_pause_first_then_runs_and_a_dot_for_needs_you() {
+        assert_eq!(look(activity(false, 0, 0)), (Look::Watching, false));
+        assert_eq!(look(activity(false, 2, 0)), (Look::Running, false));
+        assert_eq!(look(activity(false, 0, 1)), (Look::Watching, true));
+        // Paused with runs still finishing: the sails are down all the same.
+        assert_eq!(look(activity(true, 1, 3)), (Look::Paused, true));
     }
 
     #[test]

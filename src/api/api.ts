@@ -5,7 +5,7 @@
 import { createContext, useContext } from "react";
 import type {
   ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, Run, RunChanged,
-  Activity, NeedsYouItem, Notice, RunQuery, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
+  Activity, NeedsYouItem, Notice, RunQuery, TryResult, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
 } from "./types";
 
 /** Every method may reject with an ApiError. */
@@ -73,6 +73,12 @@ export interface Api {
   dismissRun(runId: string): Promise<void>;
   /** Calls `listener` on every run-changed event until the returned function is called. */
   onRunChanged(listener: (change: RunChanged) => void): () => void;
+  /**
+   * Runs `workflow` as the editor has it on one file, working out every file action
+   * without doing it: nothing changes, nothing is recorded. `answers` are the answers
+   * so far, by Ask me step id. See docs/engine.md, "Try on a file".
+   */
+  tryOnFile(workflow: Workflow, file: string, answers?: Record<string, string>): Promise<TryResult>;
 
   // The bell and Pause all: see docs/engine.md, "Notifications" and "Pause all".
   /** Newest first, at most 200. */

@@ -115,6 +115,7 @@ pub fn run() {
             commands::clear_notices,
             commands::get_activity,
             commands::pause_all,
+            commands::try_on_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

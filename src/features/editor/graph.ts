@@ -3,12 +3,14 @@
 // no edit can quietly lose part of a workflow. See docs/workflow-format.md.
 
 import type { Edge, Node, XYPosition } from "@xyflow/react";
-import type { Branch, Position, Problem, Step, StepType, Workflow } from "../../api/types";
+import type { Branch, Position, Problem, Step, StepOutcome, StepType, Workflow } from "../../api/types";
 
 export const TRIGGERS: StepType[] = ["fileAdded", "schedule", "runNow"];
 export const isTrigger = (type: StepType) => TRIGGERS.includes(type);
 
-export type StepNodeData = { step: Step; problems: Problem[] };
+/** What a try on a file did at a step it reached: how it ended, and the branch it chose. */
+export type Tried = { outcome: StepOutcome; branch: string | null };
+export type StepNodeData = { step: Step; problems: Problem[]; tried?: Tried };
 export type StepNode = Node<StepNodeData, "step">;
 
 /** One exit of a step: `handle` is the branch id, or null for a plain step's `next`. */
@@ -37,13 +39,14 @@ export function exitsOf(step: Step): Exit[] {
 
 export const edgeId = (from: string, handle: string | null) => `${from}:${handle ?? "next"}`;
 
-export function toFlow(workflow: Workflow, problems: Problem[]): { nodes: StepNode[]; edges: Edge[] } {
+/** The canvas for `workflow`. With `tried`, the outcome of each step a try reached, the path it took is marked. */
+export function toFlow(workflow: Workflow, problems: Problem[], tried: Record<string, Tried> = {}): { nodes: StepNode[]; edges: Edge[] } {
   const ids = new Set(workflow.steps.map((s) => s.id));
   const nodes: StepNode[] = workflow.steps.map((step) => ({
     id: step.id,
     type: "step",
     position: step.position,
-    data: { step, problems: problems.filter((p) => p.stepId === step.id) },
+    data: { step, problems: problems.filter((p) => p.stepId === step.id), ...(step.id in tried ? { tried: tried[step.id] } : {}) },
   }));
   const edges: Edge[] = workflow.steps.flatMap((step) =>
     exitsOf(step)
@@ -54,6 +57,8 @@ export function toFlow(workflow: Workflow, problems: Problem[]): { nodes: StepNo
         sourceHandle: exit.handle,
         target: exit.target!,
         ...(exit.label ? { label: exit.label } : {}),
+        ...(step.id in tried && exit.target! in tried && (exit.handle === null || exit.handle === tried[step.id].branch)
+          ? { className: "tried" } : {}),
       })),
   );
   return { nodes, edges };

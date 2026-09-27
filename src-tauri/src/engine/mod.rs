@@ -16,7 +16,7 @@ pub mod runs;
 pub mod schedule;
 pub mod values;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
@@ -36,12 +36,12 @@ use crate::storage::data_dir::DataDir;
 use crate::storage::settings::SettingsStore;
 use crate::storage::workflows::{WorkflowError, WorkflowStore};
 use crate::workflow::{validate, StepKind, Workflow};
-use files::{Files, Grants, Trash, Writes};
+use files::{Files, Grants, Plan, Trash, Writes};
 use intake::{Intake, Watch};
 use notices::{Notice, NoticeKind, Notices};
 use runs::{
-    NeedsYouItem, Run, RunFile, RunQuery, RunStatus, RunStore, RunSummary, RunTrigger, StepOutcome,
-    TriggerKind, UndoResult,
+    NeedsYouItem, Question, Run, RunError, RunFile, RunQuery, RunStatus, RunStore, RunSummary,
+    RunTrigger, RunValue, StepOutcome, StepRun, TriggerKind, UndoResult,
 };
 use schedule::Schedules;
 
@@ -92,6 +92,22 @@ pub struct RunChanged {
     pub run_id: String,
     pub workflow_id: String,
     pub status: RunStatus,
+}
+
+/// What a try on a file did: each step on its path and what it would do,
+/// how it ended (`done`, `waiting` on a question, or `failed`), and the
+/// values it had by then.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TryResult {
+    pub status: RunStatus,
+    pub steps: Vec<StepRun>,
+    pub values: BTreeMap<String, RunValue>,
+    /// The question it waits on, when `waiting`.
+    pub question: Option<Question>,
+    /// Why it stopped, when `failed`.
+    pub error: Option<RunError>,
 }
 
 pub struct Ports {
@@ -319,6 +335,99 @@ impl Engine {
             Inner::enqueue(inner, &run.workflow_id, &run.id);
         }
         Ok(queued.iter().map(Run::summary).collect())
+    }
+
+    /// Try on a file: runs `workflow` as the editor has it on one file, with
+    /// every file action worked out, not done. It writes nothing, records no
+    /// run, tells nobody, and leaves the file unseen. `answers` are the
+    /// person's answers so far, by Ask me step; a try without one for the
+    /// next question waits on it. A try stops at the first step on its path
+    /// with a problem.
+    pub async fn try_on_file(
+        &self,
+        workflow: Workflow,
+        file: String,
+        answers: BTreeMap<String, String>,
+    ) -> Result<TryResult, ApiError> {
+        let inner = &self.inner;
+        let kind =
+            match workflow
+                .steps
+                .iter()
+                .find(|s| s.kind.is_trigger())
+                .map(|s| &s.kind)
+            {
+                Some(StepKind::FileAdded { .. }) => TriggerKind::FileAdded,
+                Some(StepKind::RunNow { .. }) => TriggerKind::RunNow,
+                Some(_) => return Err(invalid(
+                    "A scheduled workflow runs without a file, so there's no file to try it on.",
+                )),
+                None => return Err(invalid("Add a trigger before trying this workflow.")),
+            };
+        let file = chosen_file(&file, &inner.home)?;
+        let working = inner
+            .settings
+            .load()
+            .map_err(ApiError::from)?
+            .settings
+            .working_kinds();
+        let mut problems = HashMap::new();
+        for problem in validate(&workflow, &working) {
+            match problem.step_id {
+                Some(id) => {
+                    problems.entry(id).or_insert(problem.message);
+                }
+                None => return Err(invalid(problem.message)),
+            }
+        }
+
+        let mut run = Run {
+            id: "try".into(),
+            workflow_id: workflow.id.clone(),
+            revision: workflow.revision,
+            workflow: workflow.clone(),
+            trigger: RunTrigger {
+                kind,
+                file: Some(file.clone()),
+            },
+            file: Some(file.clone()),
+            undo: None,
+            waiting_for: None,
+            continue_at: None,
+            dismissed: false,
+            status: RunStatus::Running,
+            started_at: inner.ports.now(),
+            ended_at: None,
+            steps: Vec::new(),
+            values: Default::default(),
+            error: None,
+        };
+        let grants = Grants::for_run(&workflow, Some(&file.path), &inner.home);
+        let mut ctx = runner::Ctx {
+            home: &inner.home,
+            ports: &inner.ports,
+            notices: &inner.notices,
+            stopping: &inner.stopping,
+            files: Box::new(Plan::new(grants)),
+            trying: Some(runner::Trying {
+                answers: &answers,
+                problems: &problems,
+            }),
+        };
+        let ended = runner::run(&mut run, &mut ctx, |_| {}).await;
+        let (status, error) = match ended {
+            Ok(runner::Ended::Done) => (RunStatus::Done, None),
+            Ok(runner::Ended::Waiting) => (RunStatus::Waiting, None),
+            Ok(runner::Ended::Interrupted) => (RunStatus::Interrupted, None),
+            Err(error) => (RunStatus::Failed, Some(error)),
+        };
+        Ok(TryResult {
+            status,
+            steps: run.steps,
+            values: run.values,
+            question: run.waiting_for,
+            error,
+        })
     }
 
     /// Reverses every file action of a finished run, newest first, and marks
@@ -860,13 +969,13 @@ impl Inner {
         let writes: Arc<dyn Writes> = self.intake.clone();
         let result = match Files::open(&self.journal, &run.id, grants) {
             Ok(files) => {
-                let files = files.telling(writes);
                 let mut ctx = runner::Ctx {
                     home: &self.home,
                     ports: &self.ports,
                     notices: &self.notices,
                     stopping: &self.stopping,
-                    files,
+                    files: Box::new(files.telling(writes)),
+                    trying: None,
                 };
                 runner::run(&mut run, &mut ctx, |r| self.save(r)).await
             }

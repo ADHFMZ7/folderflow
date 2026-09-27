@@ -1,6 +1,7 @@
 // The mock's engine: runs a workflow's steps the way the Rust core does
 // (src-tauri/src/engine), for the steps the core can run so far. File steps
 // change nothing, since there are no files; they record what they would do.
+// A try words each step as the core's try does, without its checks of the disk.
 
 import type { ConditionOp, NeedsYouItem, NoticeKind, Run, RunSummary, RunValue, Step, StepRun, Workflow } from "./types";
 
@@ -107,9 +108,12 @@ export function after(workflow: Workflow, stepId: string, branch: string | null)
   return branch ? step.branches[branch] ?? null : null;
 }
 
+/** For a try: the answers so far by Ask me step, and each step's first problem. */
+export type Trying = { answers: Record<string, string>; problems: Record<string, string> };
+
 /** Runs `run` to its end or its next question, changing it in place. It starts
     at `continueAt` when a run carries on, otherwise at the trigger. */
-export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, message: string) => void) {
+export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, message: string) => void, trying?: Trying) {
   const now = () => new Date().toISOString();
   let current = run.continueAt ?? workflow.steps.find((s) => s.type === "fileAdded" || s.type === "runNow")?.id ?? null;
   run.continueAt = null;
@@ -123,7 +127,9 @@ export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, m
     run.steps.push(entry);
     current = null;
     const file = run.file?.path ?? "";
+    const would = (done: string, tried: string) => (trying ? tried : done);
     try {
+    if (trying && step.id in trying.problems) throw new Error(trying.problems[step.id]);
     switch (step.type) {
       case "fileAdded":
       case "runNow":
@@ -137,22 +143,31 @@ export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, m
         break;
       }
       case "notify":
-        tell("message", fill(step.message, run.values));
+        if (trying) entry.message = `Would show the notification "${fill(step.message, run.values)}".`;
+        else tell("message", fill(step.message, run.values));
         current = step.next;
         break;
       case "stop":
         break;
       case "askMe": {
+        const given = trying?.answers[step.id];
+        const answer = step.answers.find((a) => a.id === given);
+        if (answer) {
+          entry.branch = answer.id;
+          entry.message = `You answered ${answer.label}.`;
+          current = step.branches[answer.id] ?? null;
+          break;
+        }
         const question = fill(step.question, run.values);
         entry.outcome = "waiting";
         run.waitingFor = { stepId: step.id, question, answers: step.answers };
         run.status = "waiting";
-        tell("question", question);
+        if (!trying) tell("question", question);
         return;
       }
       case "rename": {
         const to = `${folderOf(file)}/${fillName(step.template, run.values)}${extOf(nameOf(file))}`;
-        entry.message = `Renamed ${nameOf(file)} to ${nameOf(to)}.`;
+        entry.message = `${would("Renamed", "Would rename")} ${nameOf(file)} to ${nameOf(to)}.`;
         entry.values = { newName: text(stemOf(nameOf(to))) };
         run.file = { path: to, inode: run.file!.inode };
         current = step.next;
@@ -160,7 +175,7 @@ export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, m
       }
       case "move": {
         const folder = fillName(step.to, run.values);
-        entry.message = `${step.mode === "move" ? "Moved" : "Copied"} ${nameOf(file)} to ${folder}.`;
+        entry.message = `${step.mode === "move" ? would("Moved", "Would move") : would("Copied", "Would copy")} ${nameOf(file)} to ${folder}.`;
         entry.values = { newFolder: text(folder) };
         if (step.mode === "move") run.file = { path: `${folder}/${nameOf(file)}`, inode: run.file!.inode };
         current = step.next;
@@ -168,16 +183,18 @@ export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, m
       }
       case "createFile": {
         const folder = step.folder?.trim() ? fillName(step.folder, run.values) : folderOf(file);
-        entry.message = `Created ${fillName(step.name, run.values)} in ${folder}.`;
+        entry.message = `${would("Created", "Would create")} ${fillName(step.name, run.values)} in ${folder}.`;
         current = step.next;
         break;
       }
       case "addRow":
-        entry.message = `Added a row to ${nameOf(fillName(step.file, run.values))}.`;
+        entry.message = trying
+          ? `Would add the row ${step.columns.map((c) => fill(c, run.values)).join(", ")} to ${nameOf(fillName(step.file, run.values))}.`
+          : `Added a row to ${nameOf(fillName(step.file, run.values))}.`;
         current = step.next;
         break;
       case "tag":
-        entry.message = `Tagged ${nameOf(file)} ${andList(step.tags.map((t) => fill(t, run.values)))}.`;
+        entry.message = `${would("Tagged", "Would tag")} ${nameOf(file)} ${andList(step.tags.map((t) => fill(t, run.values)))}.`;
         current = step.next;
         break;
       default:
@@ -191,7 +208,7 @@ export function execute(run: Run, workflow: Workflow, tell: (kind: NoticeKind, m
       run.error = { stepId: step.id, message };
       run.status = "failed";
       const on = run.trigger.file ? ` on ${nameOf(run.trigger.file.path)}` : "";
-      tell("failed", `${step.title} failed${on}: ${message}`);
+      if (!trying) tell("failed", `${step.title} failed${on}: ${message}`);
       run.endedAt = now();
       return;
     }

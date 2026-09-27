@@ -57,6 +57,7 @@ export function createTauriApi(): Api {
     undoRun: (runId) => call("undo_run", { runId }),
     dismissRun: (runId) => call("dismiss_run", { runId }),
     onRunChanged: (listener) => subscribe<RunChanged>("run-changed", listener),
+    tryOnFile: (workflow, file, answers = {}) => call("try_on_file", { workflow, file, answers }),
     listNotices: () => call("list_notices"),
     markNoticesRead: (ids) => call("mark_notices_read", { ids: ids ?? null }),
     clearNotices: () => call("clear_notices"),
