@@ -183,7 +183,9 @@ impl Intake {
     }
 
     /// The workflow's new files, oldest first, each recorded as seen so it's
-    /// never taken again. Files FolderFlow is writing are passed over.
+    /// never taken again. Files FolderFlow is writing are passed over, and so
+    /// are files not ready yet (`ready`); none of those is recorded, so a
+    /// later look takes them.
     pub fn take(&self, id: &str) -> io::Result<Vec<RunFile>> {
         let mut state = self.lock();
         let State { on, writing } = &mut *state;
@@ -193,7 +195,9 @@ impl Intake {
         let mut new: Vec<(PathBuf, Metadata)> = candidates(&watching.watch)
             .into_iter()
             .filter(|(path, meta)| {
-                !writing.contains_key(path) && !watching.seen.contains(&key(meta))
+                !writing.contains_key(path)
+                    && !watching.seen.contains(&key(meta))
+                    && ready(path, meta)
             })
             .collect();
         new.sort_by_key(|(path, meta)| (meta.ctime(), meta.ctime_nsec(), path.clone()));
@@ -306,6 +310,24 @@ fn append(record: &mut File, lines: &[Line]) -> io::Result<()> {
     }
     record.write_all(&out)?;
     record.sync_data()
+}
+
+/// Whether a new file is ready to run. An empty file isn't: Firefox puts an
+/// empty placeholder under the final name while it downloads, and some apps
+/// create a file before writing it. Nor is a file with its download still
+/// going beside it (`Invoice.pdf.part` next to `Invoice.pdf`).
+fn ready(path: &Path, meta: &Metadata) -> bool {
+    if meta.len() == 0 {
+        return false;
+    }
+    let Some(name) = path.file_name() else {
+        return true;
+    };
+    !["part", "crdownload"].iter().any(|ext| {
+        let mut beside = name.to_os_string();
+        beside.push(format!(".{ext}"));
+        fs::symlink_metadata(path.with_file_name(beside)).is_ok()
+    })
 }
 
 /// Names of files still being downloaded.

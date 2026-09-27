@@ -166,6 +166,108 @@ async fn only_finished_plain_files_of_the_chosen_types_are_taken() {
     assert_eq!(taken(&h.settle().await), ["Wanted.pdf", "Shot.PNG"]);
 }
 
+/// The file each run acted on, by inode.
+fn inodes(runs: &[Run]) -> Vec<u64> {
+    runs.iter()
+        .map(|r| r.trigger.file.as_ref().expect("a file run").inode)
+        .collect()
+}
+
+fn inode(path: &Path) -> u64 {
+    fs::metadata(path).unwrap().ino()
+}
+
+// Each browser's steps when downloading Invoice.pdf into a watched folder
+// (issue #27). Every one runs the workflow once, on the finished file.
+
+#[tokio::test]
+async fn a_firefox_download_runs_once_on_the_finished_file_not_its_placeholder() {
+    let mut h = engine();
+    tagger(&h, "~/Downloads", &["pdf"], false);
+    let done = h.home.join("Downloads/Invoice.pdf");
+    let part = h.home.join("Downloads/Invoice.pdf.part");
+
+    // An empty placeholder under the final name, and the download beside it.
+    fs::write(&done, b"").unwrap();
+    fs::write(&part, b"%PDF-1.7 half").unwrap();
+    h.changed("Downloads");
+    assert!(h.settle().await.is_empty());
+
+    fs::write(&part, b"%PDF-1.7 half and the rest").unwrap();
+    fs::rename(&part, &done).unwrap();
+    h.changed("Downloads");
+    let runs = h.settle().await;
+    assert_eq!(taken(&runs), ["Invoice.pdf"]);
+    assert_eq!(inodes(&runs), [inode(&done)]);
+}
+
+#[tokio::test]
+async fn a_file_waits_while_its_download_is_still_going_beside_it() {
+    let mut h = engine();
+    tagger(&h, "~/Downloads", &["pdf"], false);
+    // Not empty this time: only the .part beside it says it isn't done.
+    put(&h, "Downloads/Invoice.pdf");
+    put(&h, "Downloads/Invoice.pdf.part");
+    h.changed("Downloads");
+    assert!(h.settle().await.is_empty());
+
+    fs::remove_file(h.home.join("Downloads/Invoice.pdf.part")).unwrap();
+    h.changed("Downloads");
+    assert_eq!(taken(&h.settle().await), ["Invoice.pdf"]);
+}
+
+#[tokio::test]
+async fn a_chrome_download_runs_once_when_renamed_from_crdownload() {
+    let mut h = engine();
+    tagger(&h, "~/Downloads", &["pdf"], false);
+    let partial = h.home.join("Downloads/Invoice.pdf.crdownload");
+    fs::write(&partial, b"%PDF-1.7 half").unwrap();
+    h.changed("Downloads");
+    assert!(h.settle().await.is_empty());
+
+    fs::write(&partial, b"%PDF-1.7 half and the rest").unwrap();
+    fs::rename(&partial, h.home.join("Downloads/Invoice.pdf")).unwrap();
+    h.changed("Downloads");
+    assert_eq!(taken(&h.settle().await), ["Invoice.pdf"]);
+}
+
+#[tokio::test]
+async fn a_safari_download_runs_once_when_it_leaves_its_download_package() {
+    let mut h = engine();
+    tagger(&h, "~/Downloads", &["pdf"], false);
+    put(&h, "Downloads/Invoice.pdf.download/Invoice.pdf");
+    h.changed("Downloads");
+    assert!(h.settle().await.is_empty());
+
+    fs::rename(
+        h.home.join("Downloads/Invoice.pdf.download/Invoice.pdf"),
+        h.home.join("Downloads/Invoice.pdf"),
+    )
+    .unwrap();
+    fs::remove_dir(h.home.join("Downloads/Invoice.pdf.download")).unwrap();
+    h.changed("Downloads");
+    assert_eq!(taken(&h.settle().await), ["Invoice.pdf"]);
+}
+
+#[tokio::test]
+async fn a_file_created_empty_runs_once_it_is_written() {
+    let mut h = engine();
+    tagger(&h, "~/Downloads", &["txt"], false);
+    let notes = h.home.join("Downloads/Notes.txt");
+    fs::write(&notes, b"").unwrap();
+    h.changed("Downloads");
+    assert!(h.settle().await.is_empty());
+
+    // The same file, written in place.
+    fs::write(&notes, b"Call the bank").unwrap();
+    h.changed("Downloads");
+    let runs = h.settle().await;
+    assert_eq!(taken(&runs), ["Notes.txt"]);
+    assert_eq!(inodes(&runs), [inode(&notes)]);
+    h.changed("Downloads");
+    assert_eq!(h.settle().await.len(), 1);
+}
+
 #[tokio::test]
 async fn with_subfolders_on_it_looks_inside_folders_but_not_packages() {
     let mut h = engine();
