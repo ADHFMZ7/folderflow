@@ -302,10 +302,57 @@ describe("studio", () => {
     });
   });
 
-  it("says why trying and turning on aren't available yet", async () => {
+  it("says why trying isn't available yet", async () => {
     await openWorkflow();
     expect(screen.getByRole("button", { name: "Try on a file" })).toBeDisabled();
-    expect(screen.getByRole("switch", { name: "On" })).toBeDisabled();
+  });
+});
+
+describe("the On switch", () => {
+  const on = () => screen.getByRole("switch", { name: "On" });
+
+  it("turns the workflow on, with the edits made so far", async () => {
+    const { user, api, wf } = await openWorkflow();
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), " v2");
+
+    await user.click(on());
+
+    await waitFor(async () => expect(await api.getWorkflow(wf.id)).toMatchObject({ enabled: true, name: "Tidy screenshots v2" }));
+    expect(on()).toBeChecked();
+    // From now on, edits wait in a draft.
+    await user.type(screen.getByRole("textbox", { name: "Workflow name" }), "!");
+    expect(await screen.findByRole("status", { name: "Changes not live" })).toBeInTheDocument();
+  });
+
+  it("can't turn on a workflow with problems, and says why", async () => {
+    const { user } = await openWorkflow();
+    await selectStep("When an image lands on the Desktop");
+    await user.click(screen.getByRole("button", { name: "Delete step" }));
+
+    await waitFor(() => expect(on()).toBeDisabled());
+    expect(on().closest("[title]")).toHaveAttribute("title", "Fix the problems before turning this workflow on.");
+  });
+
+  it("turns the workflow off, keeping changes that weren't live", async () => {
+    const app = renderApp({ settings: { setupComplete: true } });
+    const created = await app.api.createWorkflow("screenshots");
+    const { workflow: live } = await app.api.saveWorkflow({ ...created, enabled: true });
+    await app.api.saveDraft({ ...live, name: "Waiting" });
+    window.location.hash = `#/workflows/${live.id}`;
+    await screen.findByDisplayValue("Waiting", undefined, { timeout: 5000 });
+
+    await app.user.click(on());
+
+    await waitFor(async () => expect(await app.api.getWorkflow(live.id)).toMatchObject({ enabled: false, name: "Waiting" }));
+    expect(await app.api.getDraft(live.id)).toBeNull();
+    expect(on()).not.toBeChecked();
+    expect(screen.queryByRole("status", { name: "Changes not live" })).not.toBeInTheDocument();
+  });
+
+  it("isn't offered for a workflow that runs only when chosen", async () => {
+    await openWith([{ id: "t", type: "runNow", title: "When I choose", position: { x: 0, y: 0 }, next: null }], "When I choose");
+    expect(on()).toBeDisabled();
+    expect(on().closest("[title]")).toHaveAttribute("title", "This workflow runs when you choose Run…, so there's nothing to turn on.");
   });
 });
 

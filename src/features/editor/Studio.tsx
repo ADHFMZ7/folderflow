@@ -44,7 +44,7 @@ export function Studio({ id }: { id: string }) {
 
 type Ready = Extract<ReturnType<typeof useEditor>["state"], { status: "ready" }>;
 
-function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit<ReturnType<typeof useEditor>, "state"> & { state: Ready }) {
+function Editor({ state, edit, undo, redo, flush, apply, discard, setEnabled, reload }: Omit<ReturnType<typeof useEditor>, "state"> & { state: Ready }) {
   const { draft, problems, save, pendingApply, past, future } = state;
   const rf = useReactFlow();
   const [selected, setSelected] = useState<string | null>(null);
@@ -135,6 +135,13 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
     return () => cancelAnimationFrame(frame);
   }, [selected, rf]);
 
+  const trigger = draft.steps.find((s) => isTrigger(s.type));
+  /** Why the workflow can't be turned on, if it can't. Turning off is always allowed. */
+  const offWhy = draft.enabled ? undefined
+    : trigger?.type === "runNow" ? "This workflow runs when you choose Run…, so there's nothing to turn on."
+    : problems.length ? "Fix the problems before turning this workflow on."
+    : undefined;
+
   const stepTitle = (stepId: string) => draft.steps.find((s) => s.id === stepId)?.title ?? null;
 
   return (
@@ -160,8 +167,8 @@ function Editor({ state, edit, undo, redo, flush, apply, discard, reload }: Omit
         <span className={styles.spacer} />
         <RunNow workflow={draft} problems={problems.length} flush={flush} />
         <Button variant="secondary" disabled title="Trying a workflow on a file comes with the engine that runs workflows.">Try on a file</Button>
-        <span title="Turning workflows on comes with the engine that runs them.">
-          <Toggle label="On" checked={draft.enabled} onChange={() => {}} disabled />
+        <span title={offWhy}>
+          <Toggle label="On" checked={draft.enabled} onChange={setEnabled} disabled={!!offWhy} />
         </span>
       </header>
 
