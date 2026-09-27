@@ -14,8 +14,9 @@ use super::types::{
     ModelKind, Provider, SettingsChange, Template, WorkflowSummary,
 };
 use super::Backend;
-use crate::engine::runs::{Run, RunQuery, RunSummary};
-use crate::engine::Engine;
+use crate::engine::notices::Notice;
+use crate::engine::runs::{NeedsYouItem, Run, RunQuery, RunSummary, UndoResult};
+use crate::engine::{Activity, Engine};
 use crate::storage::settings::Settings;
 use crate::workflow::{Problem, SaveResult, Workflow};
 
@@ -80,8 +81,17 @@ pub async fn list_models(
 #[tauri::command]
 pub async fn list_workflows(
     backend: State<'_, AppBackend>,
+    engine: State<'_, Engine>,
 ) -> Result<Vec<WorkflowSummary>, ApiError> {
-    backend.list_workflows()
+    let mut list = backend.list_workflows()?;
+    let runs = engine.workflow_runs();
+    for w in &mut list {
+        if let Some((needs_you, last)) = runs.get(&w.id) {
+            w.needs_you = *needs_you;
+            w.last_run = Some(last.clone());
+        }
+    }
+    Ok(list)
 }
 
 #[tauri::command]
@@ -188,6 +198,70 @@ pub async fn list_runs(
 #[tauri::command]
 pub async fn get_run(engine: State<'_, Engine>, id: String) -> Result<Run, ApiError> {
     engine.get_run(&id)
+}
+
+#[tauri::command]
+pub async fn list_needs_you(engine: State<'_, Engine>) -> Result<Vec<NeedsYouItem>, ApiError> {
+    engine.list_needs_you()
+}
+
+#[tauri::command]
+pub async fn answer(
+    engine: State<'_, Engine>,
+    run_id: String,
+    branch_id: String,
+) -> Result<Run, ApiError> {
+    engine.answer(&run_id, &branch_id)
+}
+
+#[tauri::command]
+pub async fn retry_run(engine: State<'_, Engine>, run_id: String) -> Result<Run, ApiError> {
+    engine.retry_run(&run_id)
+}
+
+#[tauri::command]
+pub async fn resume_run(engine: State<'_, Engine>, run_id: String) -> Result<Run, ApiError> {
+    engine.resume_run(&run_id)
+}
+
+#[tauri::command]
+pub async fn undo_run(engine: State<'_, Engine>, run_id: String) -> Result<UndoResult, ApiError> {
+    engine.undo_run(&run_id)
+}
+
+#[tauri::command]
+pub async fn list_notices(engine: State<'_, Engine>) -> Result<Vec<Notice>, ApiError> {
+    Ok(engine.list_notices())
+}
+
+#[tauri::command]
+pub async fn mark_notices_read(
+    engine: State<'_, Engine>,
+    ids: Option<Vec<String>>,
+) -> Result<(), ApiError> {
+    engine.mark_notices_read(ids);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn clear_notices(engine: State<'_, Engine>) -> Result<(), ApiError> {
+    engine.clear_notices();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_activity(engine: State<'_, Engine>) -> Result<Activity, ApiError> {
+    Ok(engine.activity())
+}
+
+#[tauri::command]
+pub async fn pause_all(engine: State<'_, Engine>, paused: bool) -> Result<Activity, ApiError> {
+    engine.pause_all(paused)
+}
+
+#[tauri::command]
+pub async fn dismiss_run(engine: State<'_, Engine>, run_id: String) -> Result<(), ApiError> {
+    engine.dismiss_run(&run_id)
 }
 
 /// The native folder picker. Opened from here rather than from the webview, so

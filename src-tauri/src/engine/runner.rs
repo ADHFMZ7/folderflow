@@ -4,7 +4,8 @@
 use std::path::{Path, PathBuf};
 
 use super::files::{sys::Stamp, Files};
-use super::runs::{Run, RunError, RunFile, RunValue, StepOutcome, StepRun, ValueKind};
+use super::notices::{NoticeKind, Notices};
+use super::runs::{Question, Run, RunError, RunFile, RunValue, StepOutcome, StepRun, ValueKind};
 use super::values::{self, fill, fill_name, Values};
 use super::Ports;
 use crate::api::pickers::shorten_home;
@@ -19,6 +20,16 @@ enum Exit {
     /// On to this step, or the end of the run.
     Next(Option<String>),
     Stop,
+    /// Paused until the person answers.
+    Ask(Question),
+}
+
+/// How a run that didn't fail ended.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Ended {
+    Done,
+    /// Paused on a question, in `run.waiting_for`.
+    Waiting,
 }
 
 /// What a run works with: the home folder `~` stands for, the ports, and the
@@ -26,23 +37,35 @@ enum Exit {
 pub struct Ctx<'a> {
     pub home: &'a Path,
     pub ports: &'a Ports,
+    pub notices: &'a Notices,
     pub files: Files,
 }
 
-/// Runs `run` to the end, calling `save` after each step.
-/// Returns the error it failed with, if it did.
+/// Runs `run` to its end or its next question, calling `save` after each
+/// step. It starts at the trigger, or at `continue_at` for a run carrying on
+/// after an answer, a retry or a resume; such a run first checks its file is
+/// still where it left it. Returns the error it failed with, if it did.
 pub async fn run(
     run: &mut Run,
     ctx: &mut Ctx<'_>,
     mut save: impl FnMut(&Run),
-) -> Result<(), RunError> {
+) -> Result<Ended, RunError> {
     let ports = ctx.ports;
     let workflow = run.workflow.clone();
-    let mut current = workflow
-        .steps
-        .iter()
-        .find(|s| s.kind.is_trigger())
-        .map(|s| s.id.clone());
+    let mut current = match run.continue_at.take() {
+        Some(at) => {
+            still_there(run).map_err(|message| RunError {
+                step_id: Some(at.clone()),
+                message,
+            })?;
+            Some(at)
+        }
+        None => workflow
+            .steps
+            .iter()
+            .find(|s| s.kind.is_trigger())
+            .map(|s| s.id.clone()),
+    };
 
     let mut taken = 0;
     while let Some(id) = current.take() {
@@ -82,11 +105,18 @@ pub async fn run(
                 entry.message = done.message;
                 run.values.extend(done.values.clone());
                 entry.values = done.values;
-                save(run);
                 current = match done.exit {
                     Exit::Next(next) => next,
                     Exit::Stop => None,
+                    Exit::Ask(question) => {
+                        entry.outcome = StepOutcome::Waiting;
+                        entry.ended_at = None;
+                        run.waiting_for = Some(question);
+                        // The caller saves the waiting run.
+                        return Ok(Ended::Waiting);
+                    }
                 };
+                save(run);
             }
             Err(message) => {
                 entry.outcome = StepOutcome::Failed;
@@ -99,7 +129,35 @@ pub async fn run(
             }
         }
     }
-    Ok(())
+    Ok(Ended::Done)
+}
+
+/// A run carrying on must find its file where it left it, by inode.
+fn still_there(run: &Run) -> Result<(), String> {
+    let Some(file) = &run.file else {
+        return Ok(());
+    };
+    match Stamp::of(&file.path) {
+        Ok(now) if now.inode == file.inode => Ok(()),
+        _ => Err(format!(
+            "{} was moved or deleted while the run was waiting.",
+            name_of(&file.path)
+        )),
+    }
+}
+
+/// The step after `step_id`, given the branch it took: where a run cut off
+/// between two steps carries on.
+pub fn after(run: &Run, step_id: &str, branch: Option<&str>) -> Option<String> {
+    let step = run.workflow.steps.iter().find(|s| s.id == step_id)?;
+    if matches!(step.kind, StepKind::Stop {}) {
+        return None;
+    }
+    match (step.kind.next(), step.kind.branches(), branch) {
+        (Some(next), _, _) => next.clone(),
+        (_, Some(branches), Some(branch)) => branches.get(branch).cloned(),
+        _ => None,
+    }
 }
 
 struct Done {
@@ -162,7 +220,9 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
         }
         StepKind::Notify { message, next } => {
             let body = filled(message, run)?;
-            let shown = ctx.ports.notifier.notify(&run.workflow.name, &body);
+            let shown = ctx
+                .notices
+                .tell(NoticeKind::Message, run, &body, ctx.ports.now());
             Ok(Done {
                 message: shown
                     .err()
@@ -172,6 +232,16 @@ fn do_step(step: &Step, run: &mut Run, ctx: &mut Ctx) -> Result<Done, String> {
         }
         StepKind::Stop {} => Ok(Done {
             exit: Exit::Stop,
+            ..Done::next(&None)
+        }),
+        StepKind::AskMe {
+            question, answers, ..
+        } => Ok(Done {
+            exit: Exit::Ask(Question {
+                step_id: step.id.clone(),
+                question: filled(question, run)?,
+                answers: answers.clone(),
+            }),
             ..Done::next(&None)
         }),
         StepKind::Rename { template, next } => {

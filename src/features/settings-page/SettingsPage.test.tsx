@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render";
 
@@ -62,6 +62,7 @@ describe("appearance", () => {
     renderApp({ settings: { setupComplete: true, appearance: "dark" } });
 
     await screen.findByRole("link", { name: "Settings" });
-    expect(theme()).toBe("dark");
+    // Applied by an effect just after the first render.
+    await waitFor(() => expect(theme()).toBe("dark"));
   });
 });

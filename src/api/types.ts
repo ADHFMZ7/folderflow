@@ -84,7 +84,9 @@ export type WorkflowSummary = {
   name: string;
   trigger: string;
   enabled: boolean;
-  lastRun: string | null;
+  /** The newest run. */
+  lastRun: RunSummary | null;
+  /** How many of its runs wait on the person. */
   needsYou: number;
   kindsNeeded: ModelKindId[];
   /** "damaged": the file can't be read and is kept as is. "tooNew": written by a newer FolderFlow. */
@@ -173,7 +175,8 @@ export type ValueKind = "text" | "number" | "date" | "yesNo";
 export type RunValue = { kind: ValueKind; value: string };
 export type RunFile = { path: string; inode: number };
 export type RunTrigger = { kind: TriggerKind; file: RunFile | null };
-export type StepOutcome = "running" | "done" | "failed";
+/** "waiting": an Ask me step, waiting for the answer. */
+export type StepOutcome = "running" | "waiting" | "done" | "failed";
 
 /** What one step did. `branch` is the exit a branching step chose; `values` are the ones it produced. */
 export type StepRun = {
@@ -208,7 +211,21 @@ export type Run = {
   error: RunError | null;
   /** What undoing the run did, once it's undone. */
   undo: UndoReport | null;
+  /** The question a waiting run is paused on. */
+  waitingFor: Question | null;
+  /** The step a queued run carries on from, after an answer, a retry or a resume; null starts at the trigger. */
+  continueAt: string | null;
+  /** A failed or interrupted run the person put aside: out of Needs you. */
+  dismissed: boolean;
 };
+
+/** What an Ask me step asks, with its `{variables}` filled in. */
+export type Question = { stepId: string; question: string; answers: Branch[] };
+
+export type NeedsYouKind = "question" | "failed" | "interrupted";
+/** Something that waits on the person. `message` is the question, why the run failed, or where it stopped;
+    `step` is the title of the step it's about; `answers` are a question's buttons. */
+export type NeedsYouItem = { kind: NeedsYouKind; run: RunSummary; step: string | null; message: string; answers: Branch[] };
 
 /** An action undo didn't reverse, because its file changed after the run. */
 export type LeftAlone = { path: string; reason: string };
@@ -229,6 +246,23 @@ export type RunSummary = {
 
 /** Every field narrows the list. `before` is a run id: the runs listed after it. `limit` defaults to 100. */
 export type RunQuery = { workflowId?: string; status?: RunStatus; before?: string; limit?: number };
+
+/** A notification under the bell; the same one goes to macOS. `runId` opens its run. */
+export type NoticeKind = "question" | "failed" | "message" | "undo";
+export type Notice = {
+  id: string;
+  kind: NoticeKind;
+  workflowId: string;
+  workflowName: string;
+  runId: string | null;
+  message: string;
+  /** RFC 3339. */
+  at: string;
+  read: boolean;
+};
+
+/** What the title bar shows: Pause all, and how many runs are queued or running. */
+export type Activity = { paused: boolean; running: number };
 
 /** The `run-changed` event. Screens ask for the details with getRun. */
 export type RunChanged = { runId: string; workflowId: string; status: RunStatus };

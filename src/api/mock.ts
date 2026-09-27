@@ -3,10 +3,10 @@
 
 import type { Api } from "./api";
 import {
-  ApiError, type Connection, type Model, type ModelKind, type ModelRef, type Provider, type Run, type RunChanged,
+  ApiError, type Activity, type Connection, type Model, type ModelKind, type ModelRef, type Notice, type NoticeKind, type Provider, type Run, type RunChanged,
   type Settings, type SettingsNotice, type Template, type Workflow,
 } from "./types";
-import { execute } from "./mockRuns";
+import { after, execute, needsYouOf, summaryOf } from "./mockRuns";
 import {
   blankWorkflow, damagedSummary, roughValidate, sampleWorkflows, summarize, templateWorkflow, UUID,
 } from "./mockWorkflows";
@@ -107,16 +107,18 @@ export function createMockApi(options: MockOptions = {}): Api {
     : null;
   if (options.settings) write({ ...FRESH_SETTINGS, ...options.settings });
 
-  // Workflows, keyed by id, with made-up run state for previews.
+  // Runs, oldest first, and whoever is listening for changes to them.
+  const runRecords: Run[] = [];
+
+  // Workflows, keyed by id; sample ones come with made-up past runs for previews.
   const WORKFLOWS_KEY = "folderflow.workflows";
-  const runs = new Map<string, { needsYou: number; lastRun: string | null }>();
   const readWorkflows = (): Record<string, Workflow> => JSON.parse(storage.getItem(WORKFLOWS_KEY) ?? "{}");
   const writeWorkflows = (all: Record<string, Workflow>) => storage.setItem(WORKFLOWS_KEY, JSON.stringify(all));
   if (options.sampleWorkflows && !storage.getItem(WORKFLOWS_KEY)) {
     const all: Record<string, Workflow> = {};
-    for (const { workflow, run } of sampleWorkflows()) {
+    for (const { workflow, runs } of sampleWorkflows()) {
       all[workflow.id] = workflow;
-      runs.set(workflow.id, run);
+      runRecords.push(...runs);
     }
     writeWorkflows(all);
   }
@@ -147,20 +149,60 @@ export function createMockApi(options: MockOptions = {}): Api {
     return draft;
   };
 
-  // Runs, oldest first, and whoever is listening for changes to them.
-  const runRecords: Run[] = [];
   const listeners = new Set<(change: RunChanged) => void>();
   const announce = (run: Run) => {
     for (const listener of [...listeners]) listener({ runId: run.id, workflowId: run.workflowId, status: run.status });
   };
-  const summaryOf = (run: Run) => ({
-    id: run.id, workflowId: run.workflowId, workflowName: run.workflow.name, status: run.status,
-    file: run.trigger.file?.path.split("/").pop() ?? null, startedAt: run.startedAt, endedAt: run.endedAt,
-    error: run.error?.message ?? null,
-  });
+
+  // The bell's list, newest first, and Pause all. There are no folders here,
+  // so pausing only changes what the title bar shows.
+  const notices: Notice[] = [];
+  const noticeListeners = new Set<(unread: number) => void>();
+  const noticesChanged = () => {
+    const unread = notices.filter((n) => !n.read).length;
+    for (const listener of [...noticeListeners]) listener(unread);
+  };
+  const tell = (kind: NoticeKind, run: Run, message: string) => {
+    notices.unshift({
+      id: crypto.randomUUID(), kind, workflowId: run.workflowId, workflowName: run.workflow.name, runId: run.id,
+      message, at: new Date().toISOString(), read: false,
+    });
+    notices.splice(200);
+    noticesChanged();
+  };
+  let paused = false;
+  const activity = (): Activity => ({ paused, running: runRecords.filter((r) => r.status === "queued" || r.status === "running").length });
   // Like the core, a workflow's runs go one at a time, in order.
   let queue = Promise.resolve();
   const later = () => new Promise((r) => setTimeout(r, delayMs));
+  const enqueue = (run: Run) => {
+    queue = queue.then(async () => {
+      await later();
+      if (run.status !== "queued") return;
+      run.status = "running";
+      announce(run);
+      execute(run, run.workflow, (kind, message) => tell(kind, run, message));
+      announce(run);
+    });
+  };
+  const runOf = (id: string) => {
+    const run = runRecords.find((r) => r.id === id);
+    if (!run) throw new ApiError("not_found", "That run no longer exists.");
+    return run;
+  };
+  /** Queues a run again, to carry on from `at`. */
+  const requeue = (run: Run, at: string | null) => {
+    Object.assign(run, { continueAt: at, error: null, endedAt: null, dismissed: false, status: "queued" });
+    announce(run);
+    enqueue(run);
+    return structuredClone(run);
+  };
+  /** Each workflow's newest run, and how many of its runs need the person. */
+  const runsOf = (workflowId: string) => {
+    const mine = runRecords.filter((r) => r.workflowId === workflowId);
+    const newest = mine.reduce<Run | null>((a, r) => (!a || r.startedAt >= a.startedAt ? r : a), null);
+    return { needsYou: mine.filter((r) => needsYouOf(r)).length, lastRun: newest && summaryOf(newest) };
+  };
 
   function read(): Settings {
     if (options.storedFile === "tooNew") {
@@ -262,7 +304,7 @@ export function createMockApi(options: MockOptions = {}): Api {
 
     async listWorkflows() {
       const saved = Object.values(readWorkflows())
-        .map((wf) => ({ ...summarize(wf, runs.get(wf.id)), hasDraft: !!draftOf(wf) }))
+        .map((wf) => ({ ...summarize(wf, runsOf(wf.id)), hasDraft: !!draftOf(wf) }))
         .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id));
       return [...saved, ...(options.damagedWorkflows ?? []).map(damagedSummary)];
     },
@@ -288,17 +330,12 @@ export function createMockApi(options: MockOptions = {}): Api {
         trigger: { kind: "runNow", file: { path, inode: 1000 + runRecords.length + i } },
         file: { path, inode: 1000 + runRecords.length + i }, status: "queued",
         startedAt: new Date().toISOString(), endedAt: null, steps: [], values: {}, error: null, undo: null,
+        waitingFor: null, continueAt: null, dismissed: false,
       }));
       for (const run of queued) {
         runRecords.push(run);
         announce(run);
-        queue = queue.then(async () => {
-          await later();
-          run.status = "running";
-          announce(run);
-          execute(run, run.workflow, () => {});
-          announce(run);
-        });
+        enqueue(run);
       }
       return queued.map(summaryOf);
     },
@@ -313,14 +350,96 @@ export function createMockApi(options: MockOptions = {}): Api {
     },
 
     async getRun(id) {
-      const run = runRecords.find((r) => r.id === id);
-      if (!run) throw new ApiError("not_found", "That run no longer exists.");
+      return structuredClone(runOf(id));
+    },
+
+    async listNeedsYou() {
+      return [...runRecords].reverse().map(needsYouOf).filter((i) => i !== null);
+    },
+
+    async answer(runId, branchId) {
+      const run = runOf(runId);
+      const q = run.waitingFor;
+      if (run.status !== "waiting" || !q) throw new ApiError("conflict", "This question was already answered.");
+      const answer = q.answers.find((a) => a.id === branchId);
+      if (!answer) throw new ApiError("invalid", "That isn't one of the answers to this question.");
+      const entry = [...run.steps].reverse().find((s) => s.stepId === q.stepId && s.outcome === "waiting");
+      if (entry) Object.assign(entry, { outcome: "done", branch: branchId, endedAt: new Date().toISOString(), message: `You answered ${answer.label}.` });
+      run.waitingFor = null;
+      const next = after(run.workflow, q.stepId, branchId);
+      if (next) return requeue(run, next);
+      Object.assign(run, { status: "done", endedAt: new Date().toISOString() });
+      announce(run);
       return structuredClone(run);
+    },
+
+    async retryRun(runId) {
+      const run = runOf(runId);
+      if (run.status !== "failed") throw new ApiError("conflict", "Only a failed run can be retried.");
+      return requeue(run, run.error?.stepId ?? null);
+    },
+
+    async resumeRun(runId) {
+      const run = runOf(runId);
+      if (run.status !== "interrupted") throw new ApiError("conflict", "Only a run FolderFlow stopped by quitting can be resumed.");
+      const last = run.steps[run.steps.length - 1];
+      if (last?.outcome === "done") {
+        const next = after(run.workflow, last.stepId, last.branch);
+        if (!next) {
+          Object.assign(run, { status: "done", endedAt: new Date().toISOString() });
+          announce(run);
+          return structuredClone(run);
+        }
+        return requeue(run, next);
+      }
+      return requeue(run, last?.stepId ?? null);
+    },
+
+    async undoRun(runId) {
+      const run = runOf(runId);
+      if (run.status === "undone") throw new ApiError("conflict", "This run was already undone.");
+      if (!["done", "failed", "interrupted"].includes(run.status)) {
+        throw new ApiError("conflict", "This run hasn't finished, so it can't be undone yet.");
+      }
+      // No files here: each file step that did something counts as put back.
+      const fileSteps = ["rename", "move", "createFile", "addRow", "tag"];
+      const report = { restored: run.steps.filter((s) => s.outcome === "done" && fileSteps.includes(s.type)).length, leftAlone: [] };
+      Object.assign(run, { status: "undone", undo: report });
+      announce(run);
+      return { run: structuredClone(run), ...report };
+    },
+
+    async dismissRun(runId) {
+      const run = runOf(runId);
+      if (run.status !== "failed" && run.status !== "interrupted") {
+        throw new ApiError("conflict", "Only a failed or stopped run can be dismissed.");
+      }
+      run.dismissed = true;
+      announce(run);
     },
 
     onRunChanged(listener) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
+    },
+
+    async listNotices() { return structuredClone(notices); },
+    async markNoticesRead(ids) {
+      for (const n of notices) if (!ids || ids.includes(n.id)) n.read = true;
+      noticesChanged();
+    },
+    async clearNotices() {
+      notices.splice(0);
+      noticesChanged();
+    },
+    onNoticesChanged(listener) {
+      noticeListeners.add(listener);
+      return () => void noticeListeners.delete(listener);
+    },
+    async getActivity() { return activity(); },
+    async pauseAll(pause) {
+      paused = pause;
+      return activity();
     },
 
     async getWorkflow(id) { return stored(id); },

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize, Serializer};
 use ts_rs::TS;
 
+use crate::engine::runs::RunSummary;
 use crate::storage::connections::ConnectionError;
 use crate::storage::secrets::{Secret, SecretError};
 use crate::storage::settings::{Appearance, Connection, ModelRef, Settings, SettingsError};
@@ -203,7 +204,9 @@ pub struct WorkflowSummary {
     pub name: String,
     pub trigger: String,
     pub enabled: bool,
-    pub last_run: Option<String>,
+    /// The newest run.
+    pub last_run: Option<RunSummary>,
+    /// How many of its runs wait on the person.
     pub needs_you: u32,
     pub kinds_needed: Vec<String>,
     pub status: WorkflowStatus,

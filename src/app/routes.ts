@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 
 export const PAGES = ["workflows", "history", "templates", "settings"] as const;
 export type Page = (typeof PAGES)[number];
-export type Route = { page: Page } | { page: "workflow"; id: string };
+export type Route = { page: Page } | { page: "workflow"; id: string } | { page: "run"; id: string };
 
 export function parseHash(hash: string): Route {
   const [page, id] = hash.replace(/^#\/?/, "").split("/");
   if (page === "workflows" && id) return { page: "workflow", id };
+  if (page === "history" && id) return { page: "run", id };
   return { page: (PAGES as readonly string[]).includes(page) ? (page as Page) : "workflows" };
 }
 
-export const hrefFor = (route: Route) => (route.page === "workflow" ? `#/workflows/${route.id}` : `#/${route.page}`);
+export const hrefFor = (route: Route) =>
+  route.page === "workflow" ? `#/workflows/${route.id}` : route.page === "run" ? `#/history/${route.id}` : `#/${route.page}`;
 
 export const navigate = (route: Route) => { window.location.hash = hrefFor(route); };
 

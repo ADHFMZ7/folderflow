@@ -298,6 +298,32 @@ impl EngineHarness {
         )
     }
 
+    /// Connects a model for every AI kind, so AI steps pass validation.
+    pub fn set_models(&self) {
+        use folderflow_lib::storage::data_dir::DataDir;
+        use folderflow_lib::storage::settings::{Connection, ModelRef, Settings, SettingsStore};
+        let model = Some(ModelRef {
+            connection_id: "c1".into(),
+            model_id: "m".into(),
+        });
+        let settings = Settings {
+            connections: vec![Connection {
+                id: "c1".into(),
+                provider_id: "ollama".into(),
+                endpoint: None,
+            }],
+            defaults: [
+                ("llm".to_string(), model.clone()),
+                ("system1".to_string(), model),
+            ]
+            .into(),
+            ..Settings::default()
+        };
+        SettingsStore::new(&DataDir::open(&self.root).unwrap())
+            .save(&settings)
+            .unwrap();
+    }
+
     pub fn trash_dir(&self) -> PathBuf {
         self.home.parent().unwrap().join("trash")
     }

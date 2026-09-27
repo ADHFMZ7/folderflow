@@ -29,6 +29,21 @@ use crate::workflow::{paths, validate::variables_in, StepKind, Workflow};
 
 pub use undo::{recover, recover_all, undo, LeftAlone, Recovered, UndoReport};
 
+/// Removes a run's journal and spreadsheet backups, once its run is removed
+/// from the history: it can no longer be undone.
+pub fn forget(journal_dir: &Path, run: &str) -> io::Result<()> {
+    for result in [
+        fs::remove_file(journal::path(journal_dir, run)),
+        fs::remove_dir_all(journal::backups(journal_dir, run)),
+    ] {
+        match result {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// Moves files to the Trash. Behind a trait so tests keep their own.
 pub trait Trash: Send + Sync {
     fn trash(&self, path: &Path) -> io::Result<()>;

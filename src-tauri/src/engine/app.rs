@@ -117,6 +117,10 @@ impl EngineEvents for AppEvents {
     fn run_changed(&self, change: RunChanged) {
         let _ = self.0.emit("run-changed", change);
     }
+
+    fn notices_changed(&self, unread: u32) {
+        let _ = self.0.emit("notices-changed", unread);
+    }
 }
 
 /// Watches folders with FSEvents, sending each changed path down a channel

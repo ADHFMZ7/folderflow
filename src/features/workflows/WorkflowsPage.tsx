@@ -2,6 +2,8 @@ import type { Template, WorkflowSummary } from "../../api/types";
 import { useSettings } from "../../settings/SettingsProvider";
 import { Banner, Button, Spinner } from "../../ui";
 import { missingKinds } from "../models/defaults";
+import { NeedsYou } from "../runs/NeedsYou";
+import { useActivity } from "../shell/activity";
 import { TemplateCard } from "./TemplateCard";
 import { WorkflowCard } from "./WorkflowCard";
 import styles from "./workflows.module.css";
@@ -20,7 +22,9 @@ export function WorkflowsPage({ workflows, templates, create, remove }: Props) {
         <h1>Workflows</h1>
         <Button onClick={() => create(null)}>+ New workflow</Button>
       </header>
+      <PausedBanner />
       <MissingModelsBanner workflows={(workflows ?? []).filter((w) => w.status === "ok")} />
+      <NeedsYou />
       {workflows === null ? <Spinner label="Loading workflows…" />
         : workflows.length ? (
           <div className={styles.grid}>{workflows.map((w) => <WorkflowCard key={w.id} workflow={w} onDelete={remove} />)}</div>
@@ -50,6 +54,16 @@ function MissingModelsBanner({ workflows }: { workflows: WorkflowSummary[] }) {
   return (
     <Banner action={<a className={styles.bannerLink} href="#/settings">Set up models</a>}>
       No {names} model is set up, so {steps} steps won't run.
+    </Banner>
+  );
+}
+
+function PausedBanner() {
+  const { activity, pauseAll } = useActivity();
+  if (!activity.paused) return null;
+  return (
+    <Banner action={<Button onClick={() => pauseAll(false)}>Resume</Button>}>
+      Workflows are paused. New files wait, and schedules skip, until you resume. Runs already going finish.
     </Banner>
   );
 }

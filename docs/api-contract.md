@@ -23,6 +23,17 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `runNow(workflowId, files)` | `run_now` | `workflowId`, `files: string[]` | `RunSummary[]` |
 | `listRuns(query?)` | `list_runs` | `query: RunQuery` | `RunSummary[]` |
 | `getRun(id)` | `get_run` | `id` | `Run` |
+| `listNeedsYou()` | `list_needs_you` | none | `NeedsYouItem[]` |
+| `answer(runId, branchId)` | `answer` | `runId`, `branchId` | `Run` |
+| `retryRun(runId)` | `retry_run` | `runId` | `Run` |
+| `resumeRun(runId)` | `resume_run` | `runId` | `Run` |
+| `undoRun(runId)` | `undo_run` | `runId` | `UndoResult` |
+| `dismissRun(runId)` | `dismiss_run` | `runId` | nothing |
+| `listNotices()` | `list_notices` | none | `Notice[]` |
+| `markNoticesRead(ids?)` | `mark_notices_read` | `ids: string[] \| null` | nothing |
+| `clearNotices()` | `clear_notices` | none | nothing |
+| `getActivity()` | `get_activity` | none | `Activity` |
+| `pauseAll(paused)` | `pause_all` | `paused` | `Activity` |
 
 Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_workflow`, `delete_workflow`, `validate_workflow`) and the workflow file format are in `docs/workflow-format.md`.
 

@@ -71,6 +71,17 @@ pub fn run() {
             commands::run_now,
             commands::list_runs,
             commands::get_run,
+            commands::list_needs_you,
+            commands::answer,
+            commands::retry_run,
+            commands::resume_run,
+            commands::undo_run,
+            commands::dismiss_run,
+            commands::list_notices,
+            commands::mark_notices_read,
+            commands::clear_notices,
+            commands::get_activity,
+            commands::pause_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

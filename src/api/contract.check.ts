@@ -42,6 +42,12 @@ import type { ValueKind as GValueKind } from "./generated/ValueKind";
 import type { UndoReport as GUndoReport } from "./generated/UndoReport";
 import type { LeftAlone as GLeftAlone } from "./generated/LeftAlone";
 import type { UndoResult as GUndoResult } from "./generated/UndoResult";
+import type { Question as GQuestion } from "./generated/Question";
+import type { NeedsYouItem as GNeedsYouItem } from "./generated/NeedsYouItem";
+import type { NeedsYouKind as GNeedsYouKind } from "./generated/NeedsYouKind";
+import type { Notice as GNotice } from "./generated/Notice";
+import type { NoticeKind as GNoticeKind } from "./generated/NoticeKind";
+import type { Activity as GActivity } from "./generated/Activity";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Check<T extends true> = T;
@@ -73,6 +79,12 @@ export type ContractChecks = [
   Check<Same<GProblemCode, T.ProblemCode>>,
   Check<Same<GSaveResult, T.SaveResult>>,
   Check<Same<GRun, T.Run>>,
+  Check<Same<GQuestion, T.Question>>,
+  Check<Same<GNeedsYouItem, T.NeedsYouItem>>,
+  Check<Same<GNeedsYouKind, T.NeedsYouKind>>,
+  Check<Same<GNotice, T.Notice>>,
+  Check<Same<GNoticeKind, T.NoticeKind>>,
+  Check<Same<GActivity, T.Activity>>,
   Check<Same<GRunChanged, T.RunChanged>>,
   Check<Same<GRunError, T.RunError>>,
   Check<Same<GRunFile, T.RunFile>>,
