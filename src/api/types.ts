@@ -262,7 +262,7 @@ export type Notice = {
 };
 
 /** What the title bar shows: Pause all, and how many runs are queued or running. */
-export type Activity = { paused: boolean; running: number };
+export type Activity = { paused: boolean; running: number; needsYou: number };
 
 /** The `run-changed` event. Screens ask for the details with getRun. */
 export type RunChanged = { runId: string; workflowId: string; status: RunStatus };

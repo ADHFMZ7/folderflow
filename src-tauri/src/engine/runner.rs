@@ -2,6 +2,7 @@
 //! chose, fills in `{variables}`, and records what every step did.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::files::{sys::Stamp, Files};
 use super::notices::{NoticeKind, Notices};
@@ -30,14 +31,18 @@ pub enum Ended {
     Done,
     /// Paused on a question, in `run.waiting_for`.
     Waiting,
+    /// Stopped between steps because the app is quitting.
+    Interrupted,
 }
 
-/// What a run works with: the home folder `~` stands for, the ports, and the
-/// run's file actions, confined to the folders its workflow names.
+/// What a run works with: the home folder `~` stands for, the ports, whether
+/// the app is quitting, and the run's file actions, confined to the folders
+/// its workflow names.
 pub struct Ctx<'a> {
     pub home: &'a Path,
     pub ports: &'a Ports,
     pub notices: &'a Notices,
+    pub stopping: &'a AtomicBool,
     pub files: Files,
 }
 
@@ -69,6 +74,10 @@ pub async fn run(
 
     let mut taken = 0;
     while let Some(id) = current.take() {
+        if ctx.stopping.load(Ordering::SeqCst) {
+            // Resume carries on from the step after the last one done.
+            return Ok(Ended::Interrupted);
+        }
         taken += 1;
         if taken > MAX_STEPS {
             return Err(RunError {

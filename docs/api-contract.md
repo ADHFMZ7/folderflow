@@ -35,9 +35,11 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `getActivity()` | `get_activity` | none | `Activity` |
 | `pauseAll(paused)` | `pause_all` | `paused` | `Activity` |
 
+`updateSettings` with `openAtLogin` also adds or removes the login item (see `docs/engine.md`, "Background").
+
 Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_workflow`, `delete_workflow`, `validate_workflow`) and the workflow file format are in `docs/workflow-format.md`.
 
-Runs, the `run-changed` event (`onRunChanged` in the Api) and what each run command checks are in `docs/engine.md`, "Runs", "Run now" and "Api additions".
+Runs, the events (`onRunChanged`, `onNoticesChanged`, `onActivityChanged` and `onNavigate` in the Api) and what each run command checks are in `docs/engine.md`, "Runs", "Run now" and "Api additions".
 
 ## Rules
 

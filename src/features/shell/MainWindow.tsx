@@ -2,6 +2,8 @@
 // below it, and the current page on a raised sheet beside the sidebar.
 
 import { PanelLeft } from "lucide-react";
+import { useEffect } from "react";
+import { useApi } from "../../api/api";
 import { useRoute } from "../../app/routes";
 import { HistoryPage } from "../runs/HistoryPage";
 import { RunPage } from "../runs/RunPage";
@@ -18,6 +20,9 @@ import styles from "./MainWindow.module.css";
 
 export function MainWindow() {
   const route = useRoute();
+  const api = useApi();
+  // "2 need you" in the menu bar opens a page here.
+  useEffect(() => api.onNavigate((hash) => { window.location.hash = hash; }), [api]);
   const workflows = useWorkflows();
   const needsYou = (workflows.workflows ?? []).reduce((n, w) => n + w.needsYou, 0);
   const sidebar = useSidebarCollapsed();

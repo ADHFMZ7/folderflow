@@ -86,6 +86,10 @@ export interface Api {
   getActivity(): Promise<Activity>;
   /** While paused, new files wait and scheduled times pass by; runs already going finish, and Run now still works. */
   pauseAll(paused: boolean): Promise<Activity>;
+  /** Calls `listener` whenever the activity changes, from here or the menu bar, until the returned function is called. */
+  onActivityChanged(listener: (activity: Activity) => void): () => void;
+  /** Calls `listener` with a page's `#/…` address when the menu bar asks the window to open it. */
+  onNavigate(listener: (hash: string) => void): () => void;
 }
 
 export const ApiContext = createContext<Api | null>(null);

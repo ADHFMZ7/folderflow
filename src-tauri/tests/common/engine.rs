@@ -9,7 +9,9 @@ use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset};
 use folderflow_lib::engine::runs::{Run, RunStatus};
-use folderflow_lib::engine::{Clock, Engine, EngineEvents, Notifier, Ports, RunChanged, Watcher};
+use folderflow_lib::engine::{
+    Activity, Clock, Engine, EngineEvents, Notifier, Ports, RunChanged, Watcher,
+};
 use folderflow_lib::storage::data_dir::DataDir;
 use folderflow_lib::storage::workflows::WorkflowStore;
 use folderflow_lib::workflow::Workflow;
@@ -50,6 +52,8 @@ impl Clock for TickingClock {
 pub struct Notes {
     pub shown: Mutex<Vec<(String, String)>>,
     pub refuse: bool,
+    /// Called as each notification is shown, for a test to act mid-run.
+    pub then: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl Notifier for Notes {
@@ -61,6 +65,9 @@ impl Notifier for Notes {
             .lock()
             .unwrap()
             .push((title.to_owned(), body.to_owned()));
+        if let Some(then) = &*self.then.lock().unwrap() {
+            then();
+        }
         Ok(())
     }
 }
@@ -76,12 +83,20 @@ impl Notes {
     }
 }
 
-/// Sends every event down a channel the test reads.
-pub struct Events(pub mpsc::UnboundedSender<RunChanged>);
+/// Sends every run event down a channel the test reads, and keeps every
+/// activity event.
+pub struct Events {
+    pub runs: mpsc::UnboundedSender<RunChanged>,
+    pub activity: Arc<Mutex<Vec<Activity>>>,
+}
 
 impl EngineEvents for Events {
     fn run_changed(&self, change: RunChanged) {
-        let _ = self.0.send(change);
+        let _ = self.runs.send(change);
+    }
+
+    fn activity_changed(&self, activity: Activity) {
+        self.activity.lock().unwrap().push(activity);
     }
 }
 
@@ -105,6 +120,8 @@ pub struct EngineHarness {
     pub clock: Arc<TickingClock>,
     pub watched: Arc<Watched>,
     pub events: mpsc::UnboundedReceiver<RunChanged>,
+    /// Every `activity-changed` event, in order.
+    pub activity: Arc<Mutex<Vec<Activity>>>,
     pub engine: Engine,
 }
 
@@ -136,13 +153,17 @@ fn start_at(
     let notes = Arc::new(notes);
     let watched = Arc::new(Watched::default());
     let (tx, rx) = mpsc::unbounded_channel();
+    let activity = Arc::new(Mutex::new(Vec::new()));
     let engine = Engine::new(
         &dir,
         home.clone(),
         Ports {
             clock: clock.clone(),
             notifier: notes.clone(),
-            events: Arc::new(Events(tx)),
+            events: Arc::new(Events {
+                runs: tx,
+                activity: activity.clone(),
+            }),
             trash: Arc::new(FolderTrash(home.parent().unwrap().join("trash"))),
             watcher: watched.clone(),
         },
@@ -157,6 +178,7 @@ fn start_at(
         clock,
         watched,
         events: rx,
+        activity,
         engine,
     }
 }

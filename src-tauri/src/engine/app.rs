@@ -1,10 +1,11 @@
 //! The engine's ports in the running app: the Mac's notifications, the Trash,
-//! folder watching with FSEvents, and Tauri events to the window.
+//! folder watching with FSEvents, and Tauri events to the window and the
+//! menu bar icon.
 //!
 //! Notifications use NSUserNotificationCenter, which Apple deprecates in favour
 //! of UserNotifications. That framework works only inside an app bundle, and
 //! `tauri dev` runs a bare binary, so it would leave development builds silent.
-//! Revisit when the menu bar app lands (docs/engine.md, pull request 9).
+//! Revisit with the signed release build, where UserNotifications can be tested.
 #![allow(deprecated)]
 
 use objc2::rc::Retained;
@@ -23,7 +24,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
 use super::files::Trash;
-use super::{Engine, EngineEvents, Notifier, RunChanged, Watcher};
+use super::{Activity, Engine, EngineEvents, Notifier, RunChanged, Watcher};
 
 /// The Mac's Trash, where Finder's "Put Back" can restore from.
 pub struct AppTrash;
@@ -120,6 +121,11 @@ impl EngineEvents for AppEvents {
 
     fn notices_changed(&self, unread: u32) {
         let _ = self.0.emit("notices-changed", unread);
+    }
+
+    fn activity_changed(&self, activity: Activity) {
+        let _ = self.0.emit("activity-changed", activity);
+        crate::background::show_activity(&self.0, activity);
     }
 }
 

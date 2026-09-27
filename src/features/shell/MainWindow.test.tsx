@@ -1,5 +1,7 @@
-import { screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { createMockApi } from "../../api/mock";
+import { App } from "../../app/App";
 import { renderApp } from "../../test/render";
 
 describe("main window", () => {
@@ -7,6 +9,21 @@ describe("main window", () => {
     renderApp({ settings: { setupComplete: true } });
     expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "No workflows yet" })).toBeInTheDocument();
+  });
+
+  it("opens the page the menu bar asks for", async () => {
+    const api = createMockApi({ delayMs: 0, settings: { setupComplete: true } });
+    let open: ((hash: string) => void) | undefined;
+    api.onNavigate = (listener) => {
+      open = listener;
+      return () => { open = undefined; };
+    };
+    window.location.hash = "#/settings";
+    render(<App api={api} />);
+    expect(await screen.findByRole("heading", { name: "Models" })).toBeInTheDocument();
+
+    act(() => open?.("#/workflows"));
+    expect(await screen.findByRole("heading", { name: "Workflows" })).toBeInTheDocument();
   });
 
   it("counts the workflows that need you", async () => {

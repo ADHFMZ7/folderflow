@@ -33,6 +33,16 @@ describe("title bar", () => {
     expect(screen.queryByText(/Workflows are paused\. New files wait/)).not.toBeInTheDocument();
   });
 
+  it("follows a pause made from the menu bar", async () => {
+    const { api } = renderApp(home);
+    await within(await titleBar()).findByRole("button", { name: "Pause all workflows" });
+
+    await api.pauseAll(true);
+    expect(await within(await titleBar()).findByRole("button", { name: "Workflows are paused. Resume all workflows" })).toBeInTheDocument();
+    await api.pauseAll(false);
+    expect(await within(await titleBar()).findByRole("button", { name: "Pause all workflows" })).toBeInTheDocument();
+  });
+
   it("offers Pause all as an icon when nothing is running", async () => {
     const { api, user } = renderApp(home);
     await user.click(await within(await titleBar()).findByRole("button", { name: "Pause all workflows" }));
