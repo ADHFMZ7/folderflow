@@ -354,6 +354,27 @@ export function createMockApi(options: MockOptions = {}): Api {
       return queued.map(summaryOf);
     },
 
+    async tryOnFile(workflow, path, answers = {}) {
+      const trigger = workflow.steps.find((s) => s.type === "fileAdded" || s.type === "runNow" || s.type === "schedule");
+      if (!trigger) throw new ApiError("invalid", "Add a trigger before trying this workflow.");
+      if (trigger.type === "schedule") {
+        throw new ApiError("invalid", "A scheduled workflow runs without a file, so there's no file to try it on.");
+      }
+      const problems: Record<string, string> = {};
+      for (const p of roughValidate(workflow)) {
+        if (p.stepId === null) throw new ApiError("invalid", p.message);
+        problems[p.stepId] ??= p.message;
+      }
+      const file = { path, inode: 1 };
+      const run: Run = {
+        id: "try", workflowId: workflow.id, revision: workflow.revision, workflow: structuredClone(workflow),
+        trigger: { kind: trigger.type, file }, file, status: "running", startedAt: new Date().toISOString(), endedAt: null,
+        steps: [], values: {}, error: null, undo: null, waitingFor: null, continueAt: null, dismissed: false,
+      };
+      execute(run, run.workflow, () => {}, { answers, problems });
+      return { status: run.status, steps: run.steps, values: run.values, question: run.waitingFor, error: run.error };
+    },
+
     async listRuns(query = {}) {
       const newest = [...runRecords].reverse()
         .filter((r) => (query.workflowId === undefined || r.workflowId === query.workflowId)

@@ -48,6 +48,7 @@ import type { NeedsYouKind as GNeedsYouKind } from "./generated/NeedsYouKind";
 import type { Notice as GNotice } from "./generated/Notice";
 import type { NoticeKind as GNoticeKind } from "./generated/NoticeKind";
 import type { Activity as GActivity } from "./generated/Activity";
+import type { TryResult as GTryResult } from "./generated/TryResult";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Check<T extends true> = T;
@@ -85,6 +86,7 @@ export type ContractChecks = [
   Check<Same<GNotice, T.Notice>>,
   Check<Same<GNoticeKind, T.NoticeKind>>,
   Check<Same<GActivity, T.Activity>>,
+  Check<Same<GTryResult, T.TryResult>>,
   Check<Same<GRunChanged, T.RunChanged>>,
   Check<Same<GRunError, T.RunError>>,
   Check<Same<GRunFile, T.RunFile>>,

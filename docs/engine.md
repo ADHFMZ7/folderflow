@@ -1,6 +1,6 @@
 # Engine
 
-How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, and 9.
+How FolderFlow runs workflows. This is the plan the engine is built to, one pull request at a time (see Build order); each pull request updates the parts it builds. **Built so far:** pull requests 1 to 5, 8 and 9.
 
 ## Summary
 
@@ -342,14 +342,15 @@ Runs live in `runs/<workflow id>/<run id>.json`, with their journals, in the app
 
 ## Try on a file
 
-Try on a file runs the workflow as it stands in the editor on one chosen file, for real up to the point of changing anything, and shows what each step would do. It writes nothing, records nothing, and doesn't mark the file as seen.
+Try on a file runs the workflow as it stands in the editor on one chosen file, for real up to the point of changing anything, and shows what each step would do. It writes nothing, records nothing, shows no notification, and doesn't mark the file as seen. `Engine::try_on_file` runs the ordinary runner with `files::Plan` in place of `Files`.
 
-- **What runs:** the editor's current version (the draft, for a workflow that's on).
-- **AI steps run for real.** They are what's being tried. The Try button says where the text goes first: "Sends the file's text to Anthropic" or "Stays on this Mac".
-- **Actions are worked out, not done:** "Would rename to 2026-09-14 Blue Bottle 4.50.pdf", "Would move to ~/Documents/Receipts/2026 (the folder will be created)", "Would add a row to Expenses.csv: 2026-09-14, Blue Bottle, 4.50". Name clashes and granted-folder checks are applied as in a real run, so those problems show up here first.
-- **Ask me and reviews** appear inside the try; answering continues it.
-- **Where it shows:** each step card gets a result chip, the path taken is highlighted, and a panel lists the steps in order. Clicking a step shows its values.
-- **Problems:** a try stops at the first step on its path that has a problem, and names it. Problems on paths it doesn't take don't stop it.
+- **What runs:** the editor's current version (the draft, for a workflow that's on), sent with the request, so unsaved edits are tried too. A scheduled workflow has no file, so it has no Try button.
+- **AI steps run for real.** They are what's being tried. The Try button says where the text goes first: "Sends the file's text to Anthropic" or "Stays on this Mac". (With pull request 6; until then an AI step stops a try as it stops a run.)
+- **Actions are worked out, not done:** "Would rename Receipt.pdf to 2026-09-14 Receipt.pdf.", "Would move … to ~/Documents/Receipts/2026 (the folder will be created).", "Would add the row 2026-09-14, Blue Bottle, 4.50 to Expenses.csv.", "Would show the notification "Filed Receipt".". `Plan` numbers names against the disk as the earlier steps would have left it ("…, as Invoice 2.pdf"), and applies the granted-folder, name and link checks of a real run, so those problems show up here first. It only reads the disk.
+- **Ask me** appears inside the try, with its answers as buttons. A try keeps no state: answering tries again from the start with the answers so far (`answers`, by step id), which changes nothing since nothing was done. Reviews join this with pull request 6.
+- **Where it shows:** a card over the right of the canvas, where the step settings go when no step is selected. It lists the steps in order with what each would do; each step's values open under it, and clicking its title selects it. Each step card gets a chip (Tried, Waiting for your answer, Stopped here), and the path taken is drawn in green. The card says when the workflow has changed since the try.
+- **Problems:** a try stops at the first step on its path that has a problem, and names it. Problems on paths it doesn't take don't stop it. A problem with the whole workflow (no trigger) refuses the try.
+- **Progress:** a try without AI steps is instant, so there are no `try-step` events yet; they come with the AI steps, which take seconds.
 
 ## Api additions
 
@@ -367,7 +368,7 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 | `dismissRun(runId)` | `dismiss_run` | nothing; `conflict` unless the run is failed or interrupted |
 | `chooseFiles(start?)` | `choose_files` | `string[]`, with `~` for the home folder (empty when cancelled) |
 | `runNow(workflowId, files)` | `run_now` | `RunSummary[]`, queued |
-| `tryOnFile(workflow, file)` | `try_on_file` | `TryResult`; progress arrives as `try-step` events |
+| `tryOnFile(workflow, file, answers?)` | `try_on_file` | `TryResult`: `{ status: "done" \| "waiting" \| "failed", steps: StepRun[], values, question, error }` |
 | `pauseAll(paused)` | `pause_all` | `Activity`: `{ paused, running, needsYou }` |
 | `getActivity()` | `get_activity` | `Activity` |
 | `listNotices()` | `list_notices` | `Notice[]`, newest first |
@@ -410,7 +411,7 @@ Nine pull requests, each usable on its own and each test-first. File safety come
 | 4 ✓ | History and Needs you screens, Ask me, notifications; real `lastRun` and `needsYou` | A person can answer a question and undo a run from the app |
 | 5 ✓ | `content`: text, PDFKit, Vision, docx/pptx/xlsx | Sample files of each kind give the expected text |
 | 9 ✓ | Background: menu bar, Pause all, Open at login (the autostart plugin) | Workflows keep running with the window closed, and after a restart |
-| 8 | Try on a file | The Try button works in the editor, and nothing on disk changes |
+| 8 ✓ | Try on a file | The Try button works in the editor, and nothing on disk changes |
 | 6 | `models`: Classify, Extract and Write, answer checking, review, errors (closes #8), decision 1 | The bad-data and wrong-place tests pass with the fake model; Sort receipts runs on Ollama |
 | 7 | Agent steps | The contract part of Paperwork inbox runs |
 

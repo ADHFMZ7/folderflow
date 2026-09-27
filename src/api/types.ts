@@ -222,6 +222,15 @@ export type Run = {
 /** What an Ask me step asks, with its `{variables}` filled in. */
 export type Question = { stepId: string; question: string; answers: Branch[] };
 
+/** What a try on a file did: each step on its path and what it would do. `status` is done, waiting (on `question`) or failed (with `error`). */
+export type TryResult = {
+  status: RunStatus;
+  steps: StepRun[];
+  values: Record<string, RunValue>;
+  question: Question | null;
+  error: RunError | null;
+};
+
 export type NeedsYouKind = "question" | "failed" | "interrupted";
 /** Something that waits on the person. `message` is the question, why the run failed, or where it stopped;
     `step` is the title of the step it's about; `answers` are a question's buttons. */
