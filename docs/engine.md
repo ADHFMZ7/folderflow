@@ -305,7 +305,7 @@ Everything Vela tells the person goes two ways: a macOS notification, and the li
 
 The bell shows the unread count. Its panel lists them newest first; clicking one opens its run and marks it read, "Mark all as read" clears the count, and "Clear all" empties the list (runs stay in History). The `notices-changed` event (`onNoticesChanged`) carries the unread count whenever the list changes.
 
-**Reaching macOS.** Vela.app uses UserNotifications: it asks for permission at its first start, shows its notifications as banners even while it's the front app, and opens its window when one is clicked. If the person turned them off, the notice is still kept under the bell and says so. A development build isn't an app bundle, which UserNotifications needs, so it uses the older NSUserNotificationCenter, borrowing the bundle id (`engine/app.rs`).
+**Reaching macOS.** Vela.app uses UserNotifications: it asks for permission at its first start, shows its notifications as banners even while it's the front app, and opens its window when one is clicked. macOS only allows this when the bundle's code signature names its bundle id, so the build signs Vela.app (ad hoc, `signingIdentity: "-"`, until there's a Developer ID). If the person turned them off, the notice is still kept under the bell and says so. A development build isn't an app bundle, which UserNotifications needs, so it uses the older NSUserNotificationCenter, borrowing the bundle id (`engine/app.rs`).
 
 ### Pause all
 

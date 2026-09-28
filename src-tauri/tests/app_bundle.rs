@@ -1,6 +1,6 @@
 //! What the built Vela.app says about itself: its version, the oldest macOS
-//! it runs on, and what macOS tells the person when Vela first asks for a
-//! protected folder.
+//! it runs on, how it's signed, and what macOS tells the person when Vela
+//! first asks for a protected folder.
 
 use std::path::Path;
 
@@ -24,6 +24,15 @@ fn the_version_is_kept_in_package_json_and_the_crate_matches_it() {
 fn it_runs_on_macos_13_and_later() {
     let conf = json("tauri.conf.json");
     assert_eq!(conf["bundle"]["macOS"]["minimumSystemVersion"], "13.0");
+}
+
+/// Signed as a bundle, so its code signature names `com.adhfmz7.vela`. The
+/// linker's own signature names the binary instead, and macOS then refuses
+/// it notifications. Ad hoc until there's a Developer ID.
+#[test]
+fn the_bundle_is_signed_under_its_own_identifier() {
+    let conf = json("tauri.conf.json");
+    assert_eq!(conf["bundle"]["macOS"]["signingIdentity"], "-");
 }
 
 #[test]
