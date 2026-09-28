@@ -3,3 +3,5 @@
 .muted { color: var(--muted); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .version { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
+.notes { margin: 0; padding: var(--space-3); white-space: pre-wrap; background: var(--panel); border-radius: 8px; font-size: var(--fs-sm); }
+.error { margin: 0; color: var(--danger); }

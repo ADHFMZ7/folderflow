@@ -41,5 +41,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVCRDkxQUFFNTlFN0Q0NEIKUldSTDFPZFpyaHJaVzFjNHVRcXlHZis3U25McnZ0YUpmSW1NVFE1M0RPbHBRZUpYMVpqa21FUFEK",
+      "endpoints": [
+        "https://github.com/ADHFMZ7/vela/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

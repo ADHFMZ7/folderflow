@@ -5,7 +5,7 @@ import type { ModelRef } from "./ModelRef";
 /**
  * A partial update: each field present replaces the saved one.
  */
-export type SettingsChange = { setupComplete?: boolean, openAtLogin?: boolean, appearance?: Appearance, 
+export type SettingsChange = { setupComplete?: boolean, openAtLogin?: boolean, checkForUpdates?: boolean, appearance?: Appearance, 
 /**
  * Replaces the whole map when present.
  */

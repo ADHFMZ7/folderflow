@@ -4,7 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Api } from "./api";
-import { ApiError, type Activity, type ApiErrorCode, type RunChanged } from "./types";
+import { ApiError, type Activity, type ApiErrorCode, type RunChanged, type UpdateStatus } from "./types";
 
 const CODES: ApiErrorCode[] = ["too_new", "not_found", "invalid", "keychain", "provider", "io", "conflict"];
 
@@ -66,6 +66,10 @@ export function createTauriApi(): Api {
     pauseAll: (paused) => call("pause_all", { paused }),
     onActivityChanged: (listener) => subscribe<Activity>("activity-changed", listener),
     onNavigate: (listener) => subscribe<string>("navigate", listener),
+    getUpdateStatus: () => call("get_update_status"),
+    checkForUpdates: () => call("check_for_updates"),
+    restartToUpdate: () => call("restart_to_update"),
+    onUpdateChanged: (listener) => subscribe<UpdateStatus>("update-changed", listener),
   };
 }
 

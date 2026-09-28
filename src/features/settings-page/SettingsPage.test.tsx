@@ -43,6 +43,51 @@ describe("settings page", () => {
 
 });
 
+describe("updates", () => {
+  const updates = () => screen.findByRole("region", { name: "Updates" });
+
+  it("checks when asked and says Vela is up to date", async () => {
+    window.location.hash = "#/settings";
+    const { user } = renderApp({ settings: connected });
+
+    await user.click(await within(await updates()).findByRole("button", { name: "Check now" }));
+
+    expect(await within(await updates()).findByText("Vela is up to date. Checked just now.")).toBeInTheDocument();
+  });
+
+  it("downloads a newer version, shows its notes, and restarts to install it", async () => {
+    window.location.hash = "#/settings";
+    const { user, api } = renderApp({ settings: connected, update: { version: "0.9.1", notes: "Faster OCR." } });
+
+    await user.click(await within(await updates()).findByRole("button", { name: "Check now" }));
+
+    const section = await updates();
+    expect(await within(section).findByText("Vela 0.9.1 is ready to install.")).toBeInTheDocument();
+    expect(within(section).getByText("Faster OCR.")).toBeInTheDocument();
+    expect(within(section).getByText("Or it installs the next time you quit Vela.")).toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Restart to update" }));
+    expect(await api.getUpdateStatus()).toEqual({ state: "installing", version: "0.9.1" });
+    expect(await within(section).findByText("Installing Vela 0.9.1…")).toBeInTheDocument();
+  });
+
+  it("can stop checking on its own", async () => {
+    window.location.hash = "#/settings";
+    const { user, api } = renderApp({ settings: connected });
+
+    await user.click(await within(await updates()).findByRole("switch", { name: "Check for updates automatically" }));
+
+    await waitFor(async () => expect((await api.getSettings()).settings.checkForUpdates).toBe(false));
+  });
+
+  it("says a development build doesn't update itself", async () => {
+    window.location.hash = "#/settings";
+    renderApp({ settings: connected, update: "unavailable" });
+
+    expect(await within(await updates()).findByText(/development build doesn't update itself/)).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Check for updates automatically" })).not.toBeInTheDocument();
+  });
+});
+
 describe("appearance", () => {
   const theme = () => document.documentElement.getAttribute("data-theme");
   afterEach(() => document.documentElement.removeAttribute("data-theme"));

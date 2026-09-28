@@ -1,6 +1,6 @@
 //! What the built Vela.app says about itself: its version, the oldest macOS
-//! it runs on, how it's signed, and what macOS tells the person when Vela
-//! first asks for a protected folder.
+//! it runs on, how it's signed, where its updates come from, and what macOS
+//! tells the person when Vela first asks for a protected folder.
 
 use std::path::Path;
 
@@ -33,6 +33,22 @@ fn it_runs_on_macos_13_and_later() {
 fn the_bundle_is_signed_under_its_own_identifier() {
     let conf = json("tauri.conf.json");
     assert_eq!(conf["bundle"]["macOS"]["signingIdentity"], "-");
+}
+
+/// Updates come from the newest GitHub release, signed with Vela's key.
+/// The update archive is only built for a release, which has the private
+/// key; an ordinary build has no key to sign it with.
+#[test]
+fn updates_come_from_github_releases_signed_with_velas_key() {
+    let conf = json("tauri.conf.json");
+    let updater = &conf["plugins"]["updater"];
+    assert_eq!(
+        updater["endpoints"],
+        serde_json::json!(["https://github.com/ADHFMZ7/vela/releases/latest/download/latest.json"])
+    );
+    assert!(updater["pubkey"].as_str().is_some_and(|k| !k.is_empty()));
+    assert!(updater.get("dangerousInsecureTransportProtocol").is_none());
+    assert!(conf["bundle"].get("createUpdaterArtifacts").is_none());
 }
 
 #[test]

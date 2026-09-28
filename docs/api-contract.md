@@ -35,8 +35,11 @@ JSON field names are camelCase. Tauri maps a command's snake_case parameters to 
 | `getActivity()` | `get_activity` | none | `Activity` |
 | `pauseAll(paused)` | `pause_all` | `paused` | `Activity` |
 | `tryOnFile(workflow, file, answers?)` | `try_on_file` | `workflow`, `file`, `answers` (`{}` when left out) | `TryResult` |
+| `getUpdateStatus()` | `get_update_status` | none | `UpdateStatus` |
+| `checkForUpdates()` | `check_for_updates` | none | `UpdateStatus` |
+| `restartToUpdate()` | `restart_to_update` | none | nothing |
 
-`updateSettings` with `openAtLogin` also adds or removes the login item (see `docs/engine.md`, "Background").
+`updateSettings` with `openAtLogin` also adds or removes the login item (see `docs/engine.md`, "Background"). `checkForUpdates` turns the automatic check on or off; the update commands and `onUpdateChanged` are in `docs/engine.md`, "Updates".
 
 Workflow commands (`list_workflows`, `get_workflow`, `create_workflow`, `save_workflow`, `delete_workflow`, `validate_workflow`) and the workflow file format are in `docs/workflow-format.md`.
 
@@ -46,7 +49,7 @@ Runs, the events (`onRunChanged`, `onNoticesChanged`, `onActivityChanged` and `o
 
 - **Rust owns connections.** The front end never writes `connections`. `connect` checks the credentials with the provider, stores the key in the Keychain, saves the connection, and gives every kind without a working default the first model of that kind from the new connection. `removeConnection` deletes the key first, then the connection, and clears defaults that used it.
 - **Keys travel one way.** A key goes from the front end to Rust once, inside `connect`. No command returns a key.
-- **Partial updates.** `updateSettings` takes only `setupComplete`, `openAtLogin`, `appearance` and `defaults` (which replaces the whole map), applies them under one lock, and returns the result. A default that points at a connection that doesn't exist is rejected with `invalid`.
+- **Partial updates.** `updateSettings` takes only `setupComplete`, `openAtLogin`, `checkForUpdates`, `appearance` and `defaults` (which replaces the whole map), applies them under one lock, and returns the result. A default that points at a connection that doesn't exist is rejected with `invalid`.
 - **Expected refusals are values.** A rejected key (401 or 403), an unreachable provider, a missing key or a bad address comes back as `{ ok: false, error }` from `connect`, or `{ found: false, reason }` from `detect`.
 - **Unexpected provider answers are errors.** A server error, an unreadable reply or a redirect fails with `provider`, from `connect`, `detect` and `listModels` alike. The UI shows the message and lets the user try again, and one unreachable provider never stops the app from opening.
 - **Custom servers keep their address.** A connection made by address has an `endpoint` (saved without a trailing slash); other connections have none.
