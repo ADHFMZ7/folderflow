@@ -305,6 +305,8 @@ Everything Vela tells the person goes two ways: a macOS notification, and the li
 
 The bell shows the unread count. Its panel lists them newest first; clicking one opens its run and marks it read, "Mark all as read" clears the count, and "Clear all" empties the list (runs stay in History). The `notices-changed` event (`onNoticesChanged`) carries the unread count whenever the list changes.
 
+**Reaching macOS.** Vela.app uses UserNotifications: it asks for permission at its first start, shows its notifications as banners even while it's the front app, and opens its window when one is clicked. macOS only allows this when the bundle's code signature names its bundle id, so the build signs Vela.app (ad hoc, `signingIdentity: "-"`, until there's a Developer ID). If the person turned them off, the notice is still kept under the bell and says so. A development build isn't an app bundle, which UserNotifications needs, so it uses the older NSUserNotificationCenter, borrowing the bundle id (`engine/app.rs`).
+
 ### Pause all
 
 The title bar shows runs in progress: a spinner and "2 running". Hovered, it turns into a pause icon and "Pause all"; with nothing running, only the pause icon shows. Clicking pauses every workflow:
@@ -330,11 +332,23 @@ Vela keeps running with its window closed (decision 3). This lives in `src-tauri
   | "1 needs you", "3 need you" (only when some do) | Opens the window on Workflows, where Needs you is |
   | Open Vela | Shows the window and puts Vela back in the Dock |
   | Pause all, or Resume while paused | Pause all |
+  | Check for Updates…, or Restart to Update to 0.9.1 once one is downloaded (Vela.app only) | Checks and opens Settings › Updates, or installs and restarts; see Updates |
   | Quit Vela (⌘Q) | Quits; see Failing, quitting, crashing |
 
   It follows `activity-changed`, which the engine sends when the pause, the count of runs in progress or the count in Needs you changes.
 - **Opening Vela again** from Finder or Spotlight while it's in the menu bar shows the window.
 - **Open at login** is the `openAtLogin` setting, on by default. Saving it adds or removes a login item (a LaunchAgent, through the autostart plugin), and each start makes the login item match the setting. Only Vela.app does this; a development build would add its bare binary, so it leaves the login item alone. Opened at login, Vela starts in the menu bar with no window.
+
+### Updates
+
+Vela.app updates itself through the Tauri updater plugin (`updates.rs`). A development build can't replace itself, so its status is `unavailable` and it never checks.
+
+- **Where from:** `latest.json` on the newest GitHub release (`plugins.updater.endpoints` in `tauri.conf.json`), which names the version, its notes, and the signed `Vela.app.tar.gz` for each Mac. Every download is checked against the public key in `tauri.conf.json` before it's kept; one signed with any other key is refused. Nothing but the request for `latest.json` and the download is sent.
+- **When:** 20 seconds after launch, then every 6 hours, while the `checkForUpdates` setting is on (the default). The schedule looks every half hour by the wall clock, so time asleep counts. Check now in Settings and Check for Updates… in the menu bar check whether or not one is due. A failed check is shown in Settings and tried again at the next due time.
+- **Downloading:** a newer version is downloaded straight away, then it's `ready`: the title bar shows Update ready, which opens Settings › Updates with its notes and Restart to update, and the menu bar offers Restart to Update. Once one is ready, Vela stops checking.
+- **Installing:** Restart to update puts the new Vela.app in place of the old, then restarts; quitting stops the engine on the way, as Quit does. An update nobody restarts for installs when Vela quits, however it quits: the quit is held until the new app is in place. An install that fails from Restart to update stays ready, to try again; one that fails while quitting is dropped, so the quit goes ahead, and the next start checks again. Installing replaces the app bundle, which may ask for an administrator's password when Vela.app's folder isn't writable, so it never runs on the main thread.
+- **Publishing:** a release build signs the update with Vela's private key, kept out of the repo: `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` set, and `npx tauri build --config '{"bundle":{"createUpdaterArtifacts":true}}'`. That adds `Vela.app.tar.gz` and its `.sig` beside Vela.app; the release uploads both with a `latest.json` naming them for `darwin-aarch64` and `darwin-x86_64`. A GitHub release marked pre-release isn't "latest", so it isn't offered. Losing the private key means no installed Vela can update again.
+- **Status:** `UpdateStatus` is `unavailable`, `idle` (with `checkedAt`, the last check that found nothing newer), `checking`, `downloading`, `ready` (with `version` and `notes`), `installing` or `failed` (with `message`), sent with `update-changed` whenever it changes.
 
 ### Storage and retention
 
@@ -374,10 +388,13 @@ These join `docs/api-contract.md`, with Rust types exported through ts-rs and ch
 | `listNotices()` | `list_notices` | `Notice[]`, newest first |
 | `markNoticesRead(ids?)` | `mark_notices_read` | nothing; all of them when `ids` is left out |
 | `clearNotices()` | `clear_notices` | nothing; runs and their history are untouched |
+| `getUpdateStatus()` | `get_update_status` | `UpdateStatus` |
+| `checkForUpdates()` | `check_for_updates` | `UpdateStatus`, once the check and any download are over |
+| `restartToUpdate()` | `restart_to_update` | nothing, then Vela restarts; `io` when there's nothing to install or it couldn't be |
 
 Turning a workflow on stays a save with `enabled: true`; the engine hears of it from the command. Later, with the screen that offers to run on them, the result gains `alreadyThere: number`, the files recorded as seen without running.
 
-**Events:** `run-changed` `{ runId, workflowId, status }`, `notices-changed` with the unread count, `activity-changed` with the `Activity` (`onActivityChanged`), and `navigate` with a page's `#/…` address when the menu bar opens one (`onNavigate`). Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
+**Events:** `run-changed` `{ runId, workflowId, status }`, `notices-changed` with the unread count, `activity-changed` with the `Activity` (`onActivityChanged`), `navigate` with a page's `#/…` address when the menu bar opens one (`onNavigate`), and `update-changed` with the `UpdateStatus` (`onUpdateChanged`). Screens refresh from the commands; events only say when. The Api has `onRunChanged(listener)`, which returns a function that stops listening. Needs you needs no event of its own (see Needs you).
 
 **Errors:** runs use the existing codes. `not_found` is an unknown run, `conflict` is answering a run that isn't waiting (answered in another window, or undone), and `invalid` is an answer that isn't one of the step's branches.
 

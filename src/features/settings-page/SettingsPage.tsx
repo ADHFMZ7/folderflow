@@ -1,6 +1,7 @@
 import { useSettings } from "../../settings/SettingsProvider";
 import { Segmented, Toggle } from "../../ui";
 import { ModelSetup } from "../models/ModelSetup";
+import { Updates } from "./Updates";
 import styles from "./SettingsPage.module.css";
 
 export function SettingsPage() {
@@ -22,6 +23,11 @@ export function SettingsPage() {
         </div>
         <Toggle label="Open Vela when I log in" checked={settings.openAtLogin} onChange={(openAtLogin) => update({ openAtLogin })} />
       </section>
+      <section className={styles.section} id="updates" aria-labelledby="updates-title">
+        <h2 id="updates-title">Updates</h2>
+        <Updates />
+      </section>
+      <p className={styles.version}>Vela {__APP_VERSION__}</p>
     </div>
   );
 }

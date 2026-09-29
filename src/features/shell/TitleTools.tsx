@@ -1,9 +1,9 @@
-// The title bar's right side: runs in progress (hover to Pause all), the
-// bell, and light or dark.
+// The title bar's right side: an update ready to install, runs in progress
+// (hover to Pause all), the bell, and light or dark.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Bell, CircleAlert, CircleCheck, CircleHelp, LoaderCircle, MessageCircle, Moon, Pause, Play, Sun, type LucideIcon,
+  ArrowDownToLine, Bell, CircleAlert, CircleCheck, CircleHelp, LoaderCircle, MessageCircle, Moon, Pause, Play, Sun, type LucideIcon,
 } from "lucide-react";
 import { useApi } from "../../api/api";
 import type { Notice, NoticeKind } from "../../api/types";
@@ -11,15 +11,29 @@ import { hrefFor } from "../../app/routes";
 import { useSettings } from "../../settings/SettingsProvider";
 import { ago } from "../runs/format";
 import { useActivity } from "./activity";
+import { useUpdates } from "./updates";
 import styles from "./TitleTools.module.css";
 
 export function TitleTools() {
   return (
     <div className={styles.tools}>
+      <UpdateReady />
       <Running />
       <NoticeBell />
       <ThemeButton />
     </div>
+  );
+}
+
+/** Once an update is downloaded: opens Settings › Updates, with its notes and Restart to update. */
+function UpdateReady() {
+  const { status } = useUpdates();
+  if (status.state !== "ready") return null;
+  return (
+    <a className={styles.update} href={hrefFor({ page: "settings" })} title={`Vela ${status.version} is ready to install`}
+      onClick={() => requestAnimationFrame(() => document.getElementById("updates")?.scrollIntoView?.())}>
+      <ArrowDownToLine size={13} strokeWidth={2.2} aria-hidden /> Update ready
+    </a>
   );
 }
 

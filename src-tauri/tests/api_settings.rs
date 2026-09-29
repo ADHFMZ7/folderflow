@@ -154,6 +154,25 @@ fn appearance_can_be_changed_and_is_kept() {
 }
 
 #[test]
+fn checking_for_updates_can_be_turned_off_and_is_kept() {
+    let h = offline_harness();
+    let before = with_connection(&h, "c1");
+    assert!(before.check_for_updates);
+
+    let after = h
+        .backend
+        .update_settings(SettingsChange {
+            check_for_updates: Some(false),
+            ..SettingsChange::default()
+        })
+        .unwrap();
+
+    assert!(!after.check_for_updates);
+    assert_eq!(after.open_at_login, before.open_at_login);
+    assert!(!store(&h).load().unwrap().settings.check_for_updates);
+}
+
+#[test]
 fn update_replaces_the_whole_defaults_map() {
     let h = offline_harness();
     let mut before = with_connection(&h, "c1");

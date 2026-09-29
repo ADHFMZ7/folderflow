@@ -1,6 +1,6 @@
 [package]
 name = "vela"
-version = "0.1.0"
+version = "0.9.0"
 description = "Folder automations driven by agents"
 authors = ["adhfmz7"]
 edition = "2021"
@@ -44,6 +44,9 @@ quick-xml = "0.42.0"
 objc2-core-foundation = "0.3"
 objc2-image-io = "0.3"
 tauri-plugin-autostart = "~2.5"
+block2 = "0.6"
+objc2-user-notifications = { version = "0.3", features = ["block2", "UNUserNotificationCenter", "UNNotificationContent", "UNNotificationRequest", "UNNotification", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger", "UNNotificationSettings"] }
+tauri-plugin-updater = "~2.12"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

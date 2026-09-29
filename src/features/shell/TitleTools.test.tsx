@@ -33,6 +33,19 @@ describe("title bar", () => {
     expect(screen.queryByText(/Workflows are paused\. New files wait/)).not.toBeInTheDocument();
   });
 
+  it("says when an update is ready, and opens Settings for it", async () => {
+    const { api, user } = renderApp({ ...home, update: { version: "0.9.1", notes: "Faster OCR." } });
+    await within(await titleBar()).findByRole("button", { name: "Pause all workflows" });
+    expect(within(await titleBar()).queryByRole("link", { name: "Update ready" })).not.toBeInTheDocument();
+
+    await api.checkForUpdates();
+
+    const ready = await within(await titleBar()).findByRole("link", { name: "Update ready" });
+    expect(ready).toHaveAttribute("title", "Vela 0.9.1 is ready to install");
+    await user.click(ready);
+    expect(await screen.findByRole("button", { name: "Restart to update" })).toBeInTheDocument();
+  });
+
   it("follows a pause made from the menu bar", async () => {
     const { api } = renderApp(home);
     await within(await titleBar()).findByRole("button", { name: "Pause all workflows" });

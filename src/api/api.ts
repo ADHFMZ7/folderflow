@@ -5,7 +5,7 @@
 import { createContext, useContext } from "react";
 import type {
   ConnectOutcome, Credentials, DetectResult, LoadedSettings, Model, ModelKind, Problem, Provider, Run, RunChanged,
-  Activity, NeedsYouItem, Notice, RunQuery, TryResult, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
+  Activity, NeedsYouItem, Notice, RunQuery, TryResult, UpdateStatus, RunSummary, SaveResult, UndoResult, Settings, SettingsChange, Template, Workflow, WorkflowSummary,
 } from "./types";
 
 /** Every method may reject with an ApiError. */
@@ -96,6 +96,15 @@ export interface Api {
   onActivityChanged(listener: (activity: Activity) => void): () => void;
   /** Calls `listener` with a page's `#/…` address when the menu bar asks the window to open it. */
   onNavigate(listener: (hash: string) => void): () => void;
+
+  // Updates: see docs/engine.md, "Updates".
+  getUpdateStatus(): Promise<UpdateStatus>;
+  /** Checks now, due or not, and downloads a newer version if there is one. */
+  checkForUpdates(): Promise<UpdateStatus>;
+  /** Installs the downloaded update and restarts Vela into it. */
+  restartToUpdate(): Promise<void>;
+  /** Calls `listener` whenever the update status changes, until the returned function is called. */
+  onUpdateChanged(listener: (status: UpdateStatus) => void): () => void;
 }
 
 export const ApiContext = createContext<Api | null>(null);

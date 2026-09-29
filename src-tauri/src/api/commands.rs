@@ -19,6 +19,7 @@ use crate::engine::notices::Notice;
 use crate::engine::runs::{NeedsYouItem, Run, RunQuery, RunSummary, UndoResult};
 use crate::engine::{Activity, Engine, TryResult};
 use crate::storage::settings::Settings;
+use crate::updates::{UpdateStatus, Updates};
 use crate::workflow::{Problem, SaveResult, Workflow};
 
 pub type AppBackend = Backend<HttpProviders>;
@@ -264,6 +265,27 @@ pub async fn get_activity(engine: State<'_, Engine>) -> Result<Activity, ApiErro
 #[tauri::command]
 pub async fn pause_all(engine: State<'_, Engine>, paused: bool) -> Result<Activity, ApiError> {
     engine.pause_all(paused)
+}
+
+#[tauri::command]
+pub async fn get_update_status(updates: State<'_, Updates>) -> Result<UpdateStatus, ApiError> {
+    Ok(updates.status())
+}
+
+/// Checks now, whether or not a check is due, and downloads what it finds.
+#[tauri::command]
+pub async fn check_for_updates(updates: State<'_, Updates>) -> Result<UpdateStatus, ApiError> {
+    Ok(updates.check(chrono::Utc::now()).await)
+}
+
+/// Installs the downloaded update, then restarts Vela into it; quitting
+/// stops the engine as usual. See docs/engine.md, "Updates".
+#[tauri::command]
+pub async fn restart_to_update(app: tauri::AppHandle) -> Result<(), ApiError> {
+    tauri::async_runtime::spawn_blocking(move || crate::background::restart_to_update(&app))
+        .await
+        .map_err(|_| ApiError::new(ErrorCode::Io, "The update couldn't be installed."))?
+        .map_err(|message| ApiError::new(ErrorCode::Io, message))
 }
 
 /// Try on a file: the workflow as the editor has it, on one file, changing

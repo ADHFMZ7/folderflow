@@ -1,8 +1,8 @@
 //! Vela in the menu bar (decision 3). Closing the window hides it and
 //! the Dock icon while workflows keep running; the menu bar icon shows what
-//! the engine is doing, and opens the window, pauses or quits. Opened at
-//! login, Vela starts there with no window. See docs/engine.md,
-//! "Background".
+//! the engine is doing, and opens the window, pauses, updates or quits.
+//! Opened at login, Vela starts there with no window. See docs/engine.md,
+//! "Background" and "Updates".
 
 use std::path::Path;
 use std::time::Duration;
@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter, Manager, Window};
 use tauri_plugin_autostart::ManagerExt as _;
 
 use crate::engine::{Activity, Engine};
+use crate::updates::{UpdateStatus, Updates};
 
 const TRAY: &str = "vela";
 
@@ -43,8 +44,8 @@ fn item(id: &'static str, label: impl Into<String>) -> Entry {
 }
 
 /// The menu for this activity: what the engine is doing, how many runs are
-/// in Needs you, then Open, Pause all or Resume, and Quit.
-pub fn entries(activity: Activity) -> Vec<Entry> {
+/// in Needs you, then Open, Pause all or Resume, the update, and Quit.
+pub fn entries(activity: Activity, update: &UpdateStatus) -> Vec<Entry> {
     let mut out = vec![Entry::Item {
         id: "status",
         label: status(activity),
@@ -65,6 +66,28 @@ pub fn entries(activity: Activity) -> Vec<Entry> {
             "Pause all"
         },
     ));
+    match update {
+        UpdateStatus::Unavailable => {}
+        UpdateStatus::Ready { version, .. } => {
+            out.push(Entry::Separator);
+            out.push(item(
+                "install-update",
+                format!("Restart to Update to {version}"),
+            ));
+        }
+        UpdateStatus::Installing { version } => {
+            out.push(Entry::Separator);
+            out.push(Entry::Item {
+                id: "installing",
+                label: format!("Installing {version}…"),
+                enabled: false,
+            });
+        }
+        _ => {
+            out.push(Entry::Separator);
+            out.push(item("check-updates", "Check for Updates…"));
+        }
+    }
     out.push(Entry::Separator);
     out.push(item("quit", "Quit Vela"));
     out
@@ -114,8 +137,11 @@ fn icon(activity: Activity) -> Image<'static> {
 }
 
 fn menu(app: &AppHandle, activity: Activity) -> tauri::Result<Menu<tauri::Wry>> {
+    let update = app
+        .try_state::<Updates>()
+        .map_or(UpdateStatus::Unavailable, |u| u.status());
     let menu = Menu::new(app)?;
-    for entry in entries(activity) {
+    for entry in entries(activity, &update) {
         match entry {
             Entry::Item { id, label, enabled } => {
                 let accelerator = (id == "quit").then_some("CmdOrCtrl+Q");
@@ -157,6 +183,23 @@ pub fn show_activity(app: &AppHandle, activity: Activity) {
     });
 }
 
+/// Brings the menu up to date when the update changes.
+pub fn show_update(app: &AppHandle) {
+    show_activity(app, app.state::<Engine>().activity());
+}
+
+/// Installs the downloaded update, then restarts into it. Not on the main
+/// thread: installing may ask for an administrator's password there.
+pub fn restart_to_update(app: &AppHandle) -> Result<(), String> {
+    match app.state::<Updates>().install()? {
+        true => {
+            app.request_restart();
+            Ok(())
+        }
+        false => Err("There's no update to install.".into()),
+    }
+}
+
 fn on_menu(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         "open" => show_window(app),
@@ -172,6 +215,24 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
                 let paused = engine.activity().paused;
                 if let Err(e) = engine.pause_all(!paused) {
                     eprintln!("vela: {}", e.message);
+                }
+            });
+        }
+        "check-updates" => {
+            show_window(app);
+            let _ = app.emit("navigate", "#/settings");
+            let updates = app.state::<Updates>().inner().clone();
+            tauri::async_runtime::spawn(async move {
+                updates.check(chrono::Utc::now()).await;
+            });
+        }
+        "install-update" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Err(e) = restart_to_update(&app) {
+                    eprintln!("vela: {e}");
+                    show_window(&app);
+                    let _ = app.emit("navigate", "#/settings");
                 }
             });
         }
@@ -204,9 +265,8 @@ pub fn opened_at_login() -> bool {
 /// Adds or removes Vela's login item to match the setting. Only
 /// Vela.app does: a development build would add its bare binary.
 pub fn open_at_login(app: &AppHandle, on: bool) {
-    match std::env::current_exe() {
-        Ok(exe) if in_app_bundle(&exe) => {}
-        _ => return,
+    if !in_app_bundle() {
+        return;
     }
     let launcher = app.autolaunch();
     if launcher.is_enabled().is_ok_and(|now| now == on) {
@@ -222,7 +282,12 @@ pub fn open_at_login(app: &AppHandle, on: bool) {
     }
 }
 
-fn in_app_bundle(exe: &Path) -> bool {
+/// Whether this is Vela.app, rather than a development build's bare binary.
+pub fn in_app_bundle() -> bool {
+    std::env::current_exe().is_ok_and(|exe| is_bundled(&exe))
+}
+
+fn is_bundled(exe: &Path) -> bool {
     exe.to_string_lossy().contains(".app/Contents/MacOS/")
 }
 
@@ -241,7 +306,11 @@ mod tests {
     /// The menu as it reads, `-` for a separator and `(…)` for a line that
     /// can't be clicked.
     fn read(activity: Activity) -> Vec<String> {
-        entries(activity)
+        read_with(activity, &UpdateStatus::Unavailable)
+    }
+
+    fn read_with(activity: Activity, update: &UpdateStatus) -> Vec<String> {
+        entries(activity, update)
             .into_iter()
             .map(|e| match e {
                 Entry::Item {
@@ -273,7 +342,7 @@ mod tests {
 
     #[test]
     fn runs_waiting_on_the_person_get_a_line_that_opens_needs_you() {
-        let menu = entries(activity(false, 0, 1));
+        let menu = entries(activity(false, 0, 1), &UpdateStatus::Unavailable);
         assert_eq!(menu[1], item("needs-you", "1 needs you"));
         assert_eq!(read(activity(false, 0, 3))[1], "3 need you");
     }
@@ -288,6 +357,30 @@ mod tests {
     }
 
     #[test]
+    fn the_menu_checks_for_updates_and_offers_a_downloaded_one() {
+        let idle = UpdateStatus::Idle { checked_at: None };
+        assert_eq!(
+            read_with(activity(false, 0, 0), &idle)[4..],
+            ["-", "Check for Updates…", "-", "Quit Vela"]
+        );
+        let ready = UpdateStatus::Ready {
+            version: "0.9.1".into(),
+            notes: String::new(),
+        };
+        assert_eq!(
+            read_with(activity(false, 0, 0), &ready)[5],
+            "Restart to Update to 0.9.1"
+        );
+        let installing = UpdateStatus::Installing {
+            version: "0.9.1".into(),
+        };
+        assert_eq!(
+            read_with(activity(false, 0, 0), &installing)[5],
+            "(Installing 0.9.1…)"
+        );
+    }
+
+    #[test]
     fn the_icon_shows_the_pause_first_then_runs_and_a_dot_for_needs_you() {
         assert_eq!(look(activity(false, 0, 0)), (Look::Watching, false));
         assert_eq!(look(activity(false, 2, 0)), (Look::Running, false));
@@ -298,10 +391,10 @@ mod tests {
 
     #[test]
     fn only_an_app_bundle_changes_the_login_item() {
-        assert!(in_app_bundle(Path::new(
+        assert!(is_bundled(Path::new(
             "/Applications/Vela.app/Contents/MacOS/vela"
         )));
-        assert!(!in_app_bundle(Path::new(
+        assert!(!is_bundled(Path::new(
             "/Users/me/vela/src-tauri/target/debug/vela"
         )));
     }

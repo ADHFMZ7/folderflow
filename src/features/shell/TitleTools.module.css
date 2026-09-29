@@ -21,6 +21,13 @@
 }
 .paused:hover { background: color-mix(in srgb, var(--warn) 12%, transparent); }
 
+.update {
+  display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 15px; font-size: var(--fs-sm); font-weight: 600; text-decoration: none;
+}
+.update:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.update:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .badge {
   position: absolute; top: 1px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
   background: var(--danger); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center;

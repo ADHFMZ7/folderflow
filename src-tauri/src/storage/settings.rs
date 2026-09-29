@@ -21,6 +21,8 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub setup_complete: bool,
     pub open_at_login: bool,
+    /// Whether Vela looks for a newer version on its own.
+    pub check_for_updates: bool,
     pub appearance: Appearance,
     pub connections: Vec<Connection>,
     /// The model each kind uses unless a step overrides it, keyed by kind id.
@@ -32,6 +34,7 @@ impl Default for Settings {
         Self {
             setup_complete: false,
             open_at_login: true,
+            check_for_updates: true,
             appearance: Appearance::System,
             connections: Vec::new(),
             defaults: BTreeMap::new(),

@@ -36,6 +36,7 @@ pub enum SettingsNotice {
 pub struct SettingsChange {
     pub setup_complete: Option<bool>,
     pub open_at_login: Option<bool>,
+    pub check_for_updates: Option<bool>,
     pub appearance: Option<Appearance>,
     /// Replaces the whole map when present.
     pub defaults: Option<BTreeMap<String, Option<ModelRef>>>,

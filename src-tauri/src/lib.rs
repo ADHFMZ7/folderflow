@@ -2,11 +2,12 @@ pub mod api;
 mod background;
 pub mod engine;
 pub mod storage;
+pub mod updates;
 pub mod workflow;
 
 use std::sync::Arc;
 
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 use api::commands::{self, AppBackend};
@@ -16,6 +17,7 @@ use engine::app::{forward_changes, AppEvents, AppNotifier, AppTrash, AppWatcher}
 use engine::{Engine, Ports, SystemClock};
 use storage::data_dir::DataDir;
 use storage::secrets::KeychainStore;
+use updates::Updates;
 
 /// The bundle id from before the app was named Vela.
 const OLD_ID: &str = "com.adhfmz7.folderflow"; // rename:keep
@@ -29,6 +31,7 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec![background::AT_LOGIN]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data = app.path().app_data_dir()?;
             // The old bundle id's data folder moves over once.
@@ -42,7 +45,18 @@ pub fn run() {
                 app.path().home_dir()?,
                 Ports {
                     clock: Arc::new(SystemClock),
-                    notifier: Arc::new(AppNotifier::new(&app.config().identifier)),
+                    notifier: Arc::new(AppNotifier::new(
+                        &app.config().identifier,
+                        background::in_app_bundle(),
+                        {
+                            let handle = app.handle().clone();
+                            move || {
+                                let shown = handle.clone();
+                                let _ = handle
+                                    .run_on_main_thread(move || background::show_window(&shown));
+                            }
+                        },
+                    )),
                     events: Arc::new(AppEvents(app.handle().clone())),
                     trash: Arc::new(AppTrash),
                     watcher: Arc::new(AppWatcher::new(changes)?),
@@ -55,6 +69,17 @@ pub fn run() {
             });
             app.manage(engine);
             app.manage(Backend::new(dir, secrets, HttpProviders::default()));
+            // Only Vela.app can replace itself.
+            app.manage(if background::in_app_bundle() {
+                let handle = app.handle().clone();
+                Updates::new(updates::Plugin(handle.clone()), move |status| {
+                    let _ = handle.emit("update-changed", status);
+                    background::show_update(&handle);
+                })
+            } else {
+                Updates::unavailable()
+            });
+            updates::schedule(app.handle().clone());
 
             background::install(app)?;
             match app.state::<AppBackend>().get_settings() {
@@ -116,6 +141,9 @@ pub fn run() {
             commands::get_activity,
             commands::pause_all,
             commands::try_on_file,
+            commands::get_update_status,
+            commands::check_for_updates,
+            commands::restart_to_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -125,7 +153,12 @@ pub fn run() {
                 has_visible_windows: false,
                 ..
             } => background::show_window(app),
-            RunEvent::Exit => app.state::<Engine>().stop(background::QUIT_WAIT),
+            // However Vela quits (the menu bar, ⌘Q, the Dock, logging
+            // out), it ends here, and a downloaded update goes in place.
+            RunEvent::Exit => {
+                app.state::<Engine>().stop(background::QUIT_WAIT);
+                app.state::<Updates>().install_as_quitting();
+            }
             _ => {}
         });
 }

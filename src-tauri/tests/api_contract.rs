@@ -52,6 +52,7 @@ fn loaded_settings_has_settings_and_a_null_notice() {
         keys(&json["settings"]),
         [
             "appearance",
+            "checkForUpdates",
             "connections",
             "defaults",
             "openAtLogin",
@@ -101,6 +102,7 @@ fn settings_change_fields_are_all_optional() {
     let change: SettingsChange = serde_json::from_value(json!({
         "setupComplete": true,
         "openAtLogin": false,
+        "checkForUpdates": false,
         "appearance": "dark",
         "defaults": { "llm": { "connectionId": "c1", "modelId": "m" }, "system1": null }
     }))
@@ -108,6 +110,7 @@ fn settings_change_fields_are_all_optional() {
 
     assert_eq!(change.setup_complete, Some(true));
     assert_eq!(change.open_at_login, Some(false));
+    assert_eq!(change.check_for_updates, Some(false));
     assert_eq!(change.appearance, Some(Appearance::Dark));
     assert_eq!(
         change.defaults,

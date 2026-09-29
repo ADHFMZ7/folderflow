@@ -3,7 +3,7 @@
 
 import type { Api } from "./api";
 import {
-  ApiError, type Activity, type Connection, type Model, type ModelKind, type ModelRef, type Notice, type NoticeKind, type Provider, type Run, type RunChanged,
+  ApiError, type Activity, type UpdateStatus, type Connection, type Model, type ModelKind, type ModelRef, type Notice, type NoticeKind, type Provider, type Run, type RunChanged,
   type Settings, type SettingsNotice, type Template, type Workflow,
 } from "./types";
 import { after, execute, needsYouOf, summaryOf } from "./mockRuns";
@@ -63,7 +63,9 @@ export const TEMPLATES: Template[] = [
   { id: "paperwork", name: "Paperwork inbox", blurb: "Sort receipts, invoices and contracts from Downloads: rename, file and log them, and ask before big invoices", trigger: "File added" },
 ];
 
-export const FRESH_SETTINGS: Settings = { setupComplete: false, openAtLogin: true, appearance: "system", connections: [], defaults: {} };
+export const FRESH_SETTINGS: Settings = {
+  setupComplete: false, openAtLogin: true, checkForUpdates: true, appearance: "system", connections: [], defaults: {},
+};
 
 type KeyValueStore = Pick<Storage, "getItem" | "setItem">;
 
@@ -87,6 +89,8 @@ export type MockOptions = {
   chosenCsv?: string | null;
   /** What the file picker answers; empty is a cancel. A sample file when unset. */
   chosenFiles?: string[];
+  /** A newer version for checkForUpdates to find, or "unavailable" for a development build. None when unset. */
+  update?: { version: string; notes: string } | "unavailable";
 };
 
 const SETTINGS_KEY = "vela.settings";
@@ -170,6 +174,12 @@ export function createMockApi(options: MockOptions = {}): Api {
     });
     notices.splice(200);
     noticesChanged();
+  };
+  let update: UpdateStatus = options.update === "unavailable" ? { state: "unavailable" } : { state: "idle", checkedAt: null };
+  const updateListeners = new Set<(status: UpdateStatus) => void>();
+  const updateChanged = (status: UpdateStatus) => {
+    update = status;
+    for (const listener of [...updateListeners]) listener(status);
   };
   let paused = false;
   const activity = (): Activity => ({
@@ -484,6 +494,31 @@ export function createMockApi(options: MockOptions = {}): Api {
     // There is no menu bar here to ask for a page.
     onNavigate() {
       return () => {};
+    },
+
+    async getUpdateStatus() { return update; },
+    async checkForUpdates() {
+      if (!["idle", "failed"].includes(update.state)) return update;
+      updateChanged({ state: "checking" });
+      await wait();
+      const offer = options.update;
+      if (offer && offer !== "unavailable") {
+        updateChanged({ state: "downloading", version: offer.version });
+        await wait();
+        updateChanged({ state: "ready", ...offer });
+      } else {
+        updateChanged({ state: "idle", checkedAt: new Date().toISOString() });
+      }
+      return update;
+    },
+    // There is no app to restart here: it stays installing.
+    async restartToUpdate() {
+      if (update.state !== "ready") throw new ApiError("io", "There's no update to install.");
+      updateChanged({ state: "installing", version: update.version });
+    },
+    onUpdateChanged(listener) {
+      updateListeners.add(listener);
+      return () => void updateListeners.delete(listener);
     },
 
     async getWorkflow(id) { return stored(id); },

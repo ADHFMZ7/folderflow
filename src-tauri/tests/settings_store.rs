@@ -14,6 +14,7 @@ fn sample() -> Settings {
     Settings {
         setup_complete: true,
         open_at_login: false,
+        check_for_updates: false,
         appearance: Appearance::Dark,
         connections: vec![Connection {
             id: "c1".into(),
@@ -106,6 +107,20 @@ fn settings_saved_before_appearance_existed_follow_the_system() {
 
     assert_eq!(loaded.outcome, LoadOutcome::Loaded);
     assert_eq!(loaded.settings.appearance, Appearance::System);
+}
+
+#[test]
+fn settings_saved_before_updates_existed_check_for_them() {
+    let (_tmp, dir) = common::data_dir();
+    fs::write(
+        dir.settings_path(),
+        r#"{ "version": 1, "setupComplete": true, "openAtLogin": false }"#,
+    )
+    .unwrap();
+
+    let loaded = SettingsStore::new(&dir).load().unwrap();
+
+    assert!(loaded.settings.check_for_updates);
 }
 
 #[test]

@@ -49,6 +49,9 @@ describe("tauri api", () => {
     ["getRun", ["r1"], "get_run", { id: "r1" }],
     ["tryOnFile", [{ id: "w1" }, "~/a.pdf"], "try_on_file", { workflow: { id: "w1" }, file: "~/a.pdf", answers: {} }],
     ["tryOnFile", [{ id: "w1" }, "~/a.pdf", { q: "log" }], "try_on_file", { workflow: { id: "w1" }, file: "~/a.pdf", answers: { q: "log" } }],
+    ["getUpdateStatus", [], "get_update_status", {}],
+    ["checkForUpdates", [], "check_for_updates", {}],
+    ["restartToUpdate", [], "restart_to_update", {}],
   ] as const)("%s invokes %s", async (method, args, cmd, expected) => {
     const calls = recordCalls();
     const api = createTauriApi() as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;

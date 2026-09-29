@@ -6,7 +6,11 @@ import type { ModelRef } from "./ModelRef";
 /**
  * The user's settings. The JSON field names are the contract with the front end.
  */
-export type Settings = { setupComplete: boolean, openAtLogin: boolean, appearance: Appearance, connections: Array<Connection>, 
+export type Settings = { setupComplete: boolean, openAtLogin: boolean, 
+/**
+ * Whether Vela looks for a newer version on its own.
+ */
+checkForUpdates: boolean, appearance: Appearance, connections: Array<Connection>, 
 /**
  * The model each kind uses unless a step overrides it, keyed by kind id.
  */

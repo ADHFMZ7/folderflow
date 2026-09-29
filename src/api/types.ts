@@ -55,6 +55,8 @@ export type Appearance = "system" | "light" | "dark";
 export type Settings = {
   setupComplete: boolean;
   openAtLogin: boolean;
+  /** Whether Vela looks for a newer version on its own. */
+  checkForUpdates: boolean;
   appearance: Appearance;
   connections: Connection[];
   /** The model each kind uses unless a step overrides it. */
@@ -67,7 +69,7 @@ export type SettingsNotice = { kind: "recovered"; backup: string } | null;
 export type LoadedSettings = { settings: Settings; notice: SettingsNotice };
 
 /** The parts of Settings the front end may change. Connections change only through connect and remove. */
-export type SettingsChange = Partial<Pick<Settings, "setupComplete" | "openAtLogin" | "appearance" | "defaults">>;
+export type SettingsChange = Partial<Pick<Settings, "setupComplete" | "openAtLogin" | "checkForUpdates" | "appearance" | "defaults">>;
 
 export type ApiErrorCode = "too_new" | "not_found" | "invalid" | "keychain" | "provider" | "io" | "conflict";
 
@@ -272,6 +274,19 @@ export type Notice = {
 
 /** What the title bar shows: Pause all, and how many runs are queued or running. */
 export type Activity = { paused: boolean; running: number; needsYou: number };
+
+/** Where updates stand. See docs/engine.md, "Updates". */
+export type UpdateStatus =
+  /** A development build, which can't replace itself. */
+  | { state: "unavailable" }
+  /** `checkedAt` is the last check that found nothing newer. */
+  | { state: "idle"; checkedAt: string | null }
+  | { state: "checking" }
+  | { state: "downloading"; version: string }
+  /** Downloaded: installs on restart, or when Vela quits. */
+  | { state: "ready"; version: string; notes: string }
+  | { state: "installing"; version: string }
+  | { state: "failed"; message: string };
 
 /** The `run-changed` event. Screens ask for the details with getRun. */
 export type RunChanged = { runId: string; workflowId: string; status: RunStatus };
